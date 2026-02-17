@@ -1,4 +1,5 @@
 import json
+from datetime import time
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
@@ -12,9 +13,11 @@ from django.views.decorators.http import require_http_methods
 from .models import Booking, MeetingRoom
 
 
-# ---------------------------
-# helpers
-# ---------------------------
+WORK_DAYS = {0, 1, 2, 3, 4}
+WORK_START = time(9, 0)
+WORK_END = time(18, 0)
+
+
 def _json_ok(extra=None):
     data = {"ok": True}
     if extra:
@@ -41,18 +44,51 @@ def _parse_body_json(request):
 
 
 def _booking_color(status: str) -> str:
-    # просто щоб в календарі було видно статус
     if status == Booking.Status.APPROVED:
         return "#2e7d32"
     if status == Booking.Status.PENDING:
         return "#6c757d"
     if status == Booking.Status.CANCELLED:
         return "#f57c00"
-    return "#b71c1c"  # rejected / unknown
+    return "#b71c1c"
+
+
+def _ensure_aware(dt):
+    if dt is None:
+        return None
+    if timezone.is_aware(dt):
+        return dt
+    return timezone.make_aware(dt, timezone.get_current_timezone())
+
+
+def _is_within_working_hours(start, end) -> bool:
+    if not start or not end:
+        return False
+
+    start = _ensure_aware(start)
+    end = _ensure_aware(end)
+
+    if end <= start:
+        return False
+
+    if start.date() != end.date():
+        return False
+
+    if start.weekday() not in WORK_DAYS:
+        return False
+
+    st = start.timetz().replace(tzinfo=None)
+    en = end.timetz().replace(tzinfo=None)
+
+    if st < WORK_START:
+        return False
+    if en > WORK_END:
+        return False
+
+    return True
 
 
 def _has_overlap_active(*, room_id, start, end, exclude_id=None) -> bool:
-    # перевіряємо перетин тільки з "живими" бронюваннями (pending/approved)
     qs = (
         Booking.objects.filter(room_id=room_id)
         .exclude(status__in=[Booking.Status.REJECTED, Booking.Status.CANCELLED])
@@ -76,9 +112,6 @@ def _get_room_ids_from_query(request) -> list[int]:
     return room_ids
 
 
-# ---------------------------
-# api: rooms
-# ---------------------------
 @login_required
 @require_http_methods(["GET"])
 def api_rooms(request):
@@ -89,14 +122,9 @@ def api_rooms(request):
     )
 
 
-# ---------------------------
-# api: bookings
-# ---------------------------
 @login_required
 @require_http_methods(["GET", "POST"])
 def api_bookings(request):
-    # GET  -> події для FullCalendar
-    # POST -> створення бронювання (pending)
     if request.method == "GET":
         start = request.GET.get("start")
         end = request.GET.get("end")
@@ -104,27 +132,21 @@ def api_bookings(request):
         qs = Booking.objects.select_related("room", "user")
         room_ids = _get_room_ids_from_query(request)
 
-        # фільтр по вікну календаря (FullCalendar передає start/end)
         if start and end:
-            start_dt = parse_datetime(start)
-            end_dt = parse_datetime(end)
+            start_dt = _ensure_aware(parse_datetime(start))
+            end_dt = _ensure_aware(parse_datetime(end))
             if start_dt and end_dt:
                 qs = qs.filter(start__lt=end_dt, end__gt=start_dt)
 
         if room_ids:
             qs = qs.filter(room_id__in=room_ids)
 
-        # видимість:
-        # - staff бачить все
-        # - звичайний бачить затверджені бронювання всіх + свої (будь-який статус)
         if not request.user.is_staff:
             qs = qs.filter(Q(status=Booking.Status.APPROVED) | Q(user=request.user))
 
         events = []
         for b in qs:
             title = f"{b.room.name} ({b.get_status_display()})"
-
-            # якщо в моделі є поле title — можна показувати його
             if getattr(b, "title", ""):
                 title = b.title
 
@@ -149,18 +171,16 @@ def api_bookings(request):
 
         return JsonResponse(events, safe=False)
 
-    # --- POST ---
     payload = _parse_body_json(request)
     if payload is None:
         return _json_error("Bad JSON", status=400)
 
-    # на всяк: підтримка room_id і roomId
     room_id = _parse_int(payload.get("room_id"), default=None)
     if room_id is None:
         room_id = _parse_int(payload.get("roomId"), default=None)
 
-    start = parse_datetime(payload.get("start"))
-    end = parse_datetime(payload.get("end"))
+    start = _ensure_aware(parse_datetime(payload.get("start")))
+    end = _ensure_aware(parse_datetime(payload.get("end")))
 
     if room_id is None or not start or not end:
         return _json_error("Missing/invalid fields", status=400)
@@ -168,6 +188,12 @@ def api_bookings(request):
     room = MeetingRoom.objects.filter(id=room_id).first()
     if not room:
         return _json_error("Room not found", status=404)
+
+    if not _is_within_working_hours(start, end):
+        return _json_error(
+            "Бронювання дозволено тільки в робочий час (Пн–Пт, 09:00–18:00).",
+            status=400,
+        )
 
     if _has_overlap_active(room_id=room_id, start=start, end=end):
         return _json_error("Цей час уже зайнятий для вибраної переговорної.", status=400)
@@ -180,7 +206,6 @@ def api_bookings(request):
         status=Booking.Status.PENDING,
     )
 
-    # ці поля можуть бути, а можуть і не бути (залежить від твоєї моделі)
     if hasattr(booking, "title"):
         booking.title = (payload.get("title") or "").strip()
     if hasattr(booking, "comment"):
@@ -198,7 +223,6 @@ def api_bookings(request):
 @login_required
 @require_http_methods(["POST"])
 def api_booking_cancel(request, booking_id):
-    # staff може скасувати будь-яке, користувач — тільки своє
     booking = get_object_or_404(Booking, id=booking_id)
 
     if booking.user_id != request.user.id and not request.user.is_staff:
@@ -219,6 +243,12 @@ def api_booking_approve(request, booking_id):
     if booking.status != Booking.Status.PENDING:
         return _json_error("Not pending", status=400)
 
+    if not _is_within_working_hours(booking.start, booking.end):
+        return _json_error(
+            "Не можна підтвердити бронювання поза робочим часом (Пн–Пт, 09:00–18:00).",
+            status=400,
+        )
+
     if _has_overlap_active(
         room_id=booking.room_id,
         start=booking.start,
@@ -229,7 +259,6 @@ def api_booking_approve(request, booking_id):
 
     booking.status = Booking.Status.APPROVED
 
-    # якщо є поля "хто підтвердив" і "коли"
     if hasattr(booking, "approved_by_id"):
         booking.approved_by = request.user
     if hasattr(booking, "approved_at"):
