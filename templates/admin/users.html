@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Користувачі{% endblock %}
+
+{% block content %}
+  <div class="row" style="margin-top: 4px;">
+    <div class="col s12">
+      <div class="card">
+        <div class="card-content">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <span class="card-title" style="margin:0;">Користувачі</span>
+
+            {% if request.user.is_staff %}
+              <a class="btn waves-effect waves-light green"
+                 href="{% url 'admin_create_user' %}">
+                <i class="material-icons left">person_add</i>
+                Створити користувача
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Фільтри/пошук -->
+    <div class="col s12 m5">
+      <div class="card">
+        <div class="card-content">
+          <span class="card-title">Пошук</span>
+
+          <form method="get">
+            <div class="input-field">
+              <input id="q" name="q" type="text" value="{{ q }}">
+              <label for="q" class="{% if q %}active{% endif %}">Username / Email / Ім’я / Прізвище</label>
+            </div>
+
+            <div class="input-field">
+              <select id="active" name="active">
+                <option value="" {% if not active %}selected{% endif %}>Усі</option>
+                <option value="1" {% if active == "1" %}selected{% endif %}>Активні</option>
+                <option value="0" {% if active == "0" %}selected{% endif %}>Неактивні</option>
+              </select>
+              <label for="active">Статус</label>
+            </div>
+
+            <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn waves-effect waves-light" type="submit">
+                Застосувати <i class="material-icons right">search</i>
+              </button>
+
+              {% if q or active %}
+                <a class="btn grey" href="{% url 'admin_users' %}">
+                  Скинути <i class="material-icons right">refresh</i>
+                </a>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Список -->
+    <div class="col s12 m7">
+      <div class="card">
+        <div class="card-content">
+          <span class="card-title">Список</span>
+
+          <table class="striped">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Статус</th>
+                <th class="right-align">Дії</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for u in users %}
+              <tr>
+                <td>{{ u.username }}</td>
+                <td>{{ u.email }}</td>
+                <td>
+                  {% if u.is_active %}
+                    <span class="new badge green" data-badge-caption="active"></span>
+                  {% else %}
+                    <span class="new badge red" data-badge-caption="inactive"></span>
+                  {% endif %}
+                  {% if u.is_staff %}
+                    <span class="new badge blue" data-badge-caption="staff"></span>
+                  {% endif %}
+                </td>
+                <td class="right-align" style="white-space:nowrap;">
+                  <a class="btn" href="{% url 'admin_user_detail' u.id %}" title="Відкрити">
+                    <i class="material-icons">open_in_new</i>
+                  </a>
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="4">Користувачів не знайдено.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Materialize select init (потрібно якщо в base.html ще немає ініціалізації)
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.M && M.FormSelect) {
+        var elems = document.querySelectorAll('select');
+        M.FormSelect.init(elems);
+      }
+    });
+  </script>
+{% endblock %}

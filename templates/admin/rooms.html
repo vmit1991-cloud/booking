@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Переговорні{% endblock %}
+
+{% block content %}
+  <div class="row" style="margin-top: 4px;">
+    <div class="col s12">
+      <div class="card">
+        <div class="card-content">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <span class="card-title">Переговорні кімнати</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Форма додавання -->
+    <div class="col s12 m5">
+      <div class="card">
+        <div class="card-content">
+          <span class="card-title">Додати переговорну</span>
+
+          <form method="post">
+            {% csrf_token %}
+
+            <div class="input-field">
+              <input id="name" name="name" type="text" required>
+              <label for="name">Назва</label>
+            </div>
+
+            <div class="input-field">
+              <input id="capacity" name="capacity" type="number" min="1" required>
+              <label for="capacity">Кількість місць</label>
+            </div>
+
+            <p><label><input type="checkbox" name="has_projector"><span>Проектор</span></label></p>
+            <p><label><input type="checkbox" name="has_speakerphone"><span>Спікерфон</span></label></p>
+            <p><label><input type="checkbox" name="has_tv"><span>Телевізор</span></label></p>
+            <p><label><input type="checkbox" name="has_whiteboard"><span>Маркерна дошка</span></label></p>
+
+            <div style="margin-top:16px;">
+              <button class="btn waves-effect waves-light" type="submit">
+                Додати <i class="material-icons right">add</i>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Список -->
+    <div class="col s12 m7">
+      <div class="card">
+        <div class="card-content">
+          <span class="card-title">Список</span>
+
+          <table class="striped">
+            <thead>
+              <tr>
+                <th>Назва</th>
+                <th>Місць</th>
+                <th>Обладнання</th>
+                <th class="right-align">Дії</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rooms %}
+              <tr>
+                <td>{{ r.name }}</td>
+                <td>{{ r.capacity }}</td>
+                <td>
+                  {% if r.has_projector %}Проектор{% endif %}
+                  {% if r.has_speakerphone %}{% if r.has_projector %}, {% endif %}Спікерфон{% endif %}
+                  {% if r.has_tv %}{% if r.has_projector or r.has_speakerphone %}, {% endif %}ТВ{% endif %}
+                  {% if r.has_whiteboard %}{% if r.has_projector or r.has_speakerphone or r.has_tv %}, {% endif %}Дошка{% endif %}
+                </td>
+                <td class="right-align" style="white-space:nowrap;">
+                  <a class="btn" href="{% url 'admin_room_edit' r.id %}" title="Редагувати">
+                    <i class="material-icons">edit</i>
+                  </a>
+
+                  <a class="btn red" href="{% url 'admin_room_delete' r.id %}" title="Видалити">
+                    <i class="material-icons">delete</i>
+                  </a>
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="4">Ще немає переговорних.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

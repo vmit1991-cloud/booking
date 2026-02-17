@@ -1,0 +1,763 @@
+{% extends "base.html" %}
+
+{% block title %}Календар{% endblock %}
+
+{% block content %}
+<div class="page-wrap">
+  <div class="calendar-wrap">
+    <div id="calendar"></div>
+  </div>
+</div>
+
+<!-- create booking -->
+<div id="bookingModal" class="modal">
+  <div class="modal-content">
+    <h5>Нове бронювання</h5>
+
+    <div class="row" style="margin-top:16px;">
+      <div class="input-field col s12">
+        <select id="roomSelect"></select>
+        <label>Переговорна</label>
+      </div>
+
+      <div class="input-field col s12 m6">
+        <input id="startInput" type="text" autocomplete="off">
+        <label for="startInput" class="active">Початок</label>
+      </div>
+
+      <div class="input-field col s12 m6">
+        <input id="endInput" type="text" autocomplete="off">
+        <label for="endInput" class="active">Кінець</label>
+      </div>
+
+      <div class="col s12 red-text" id="bookingError" style="display:none; padding-top:8px;"></div>
+    </div>
+  </div>
+
+  <div class="modal-footer">
+    <a href="#!" class="modal-close waves-effect waves-light btn-flat">Скасувати</a>
+    <a href="#!" id="saveBookingBtn" class="waves-effect waves-light btn">Створити</a>
+  </div>
+</div>
+
+<!-- booking details -->
+<div id="bookingInfoModal" class="modal">
+  <div class="modal-content">
+    <h5>Бронювання</h5>
+
+    <ul class="collection" style="margin-top:16px;">
+      <li class="collection-item"><b>Кімната:</b> <span id="infoRoom"></span></li>
+      <li class="collection-item"><b>Початок:</b> <span id="infoStart"></span></li>
+      <li class="collection-item"><b>Кінець:</b> <span id="infoEnd"></span></li>
+      <li class="collection-item"><b>Статус:</b> <span id="infoStatus"></span></li>
+      <li class="collection-item"><b>Хто забронював:</b> <span id="infoUser"></span></li>
+    </ul>
+
+    <div class="col s12 red-text" id="infoError" style="display:none;"></div>
+  </div>
+
+  <div class="modal-footer" id="infoFooter">
+    <a href="#!" class="modal-close waves-effect waves-light btn-flat">Закрити</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.page-wrap { display:block; }
+.calendar-wrap { padding:12px; }
+#calendar { height:auto; min-height:650px; }
+
+.modal, .modal .modal-content, .modal .modal-footer { overflow: visible !important; }
+
+/* flatpickr поверх всього */
+.flatpickr-calendar { z-index: 20000 !important; }
+
+/* flatpickr: місяць рік по центру, без hover  */
+.flatpickr-calendar .flatpickr-months .flatpickr-month{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.flatpickr-calendar .flatpickr-current-month{
+  position: relative !important;
+  left: 0 !important;
+  width: 100% !important;
+
+  display:flex !important;
+  align-items: baseline !important;
+  justify-content:center !important;
+
+  gap: 10px;
+  padding: 0 !important;
+  white-space: nowrap;
+}
+
+.flatpickr-calendar .flatpickr-current-month .cur-month{
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 24px !important;
+  height: 24px !important;
+}
+
+.flatpickr-calendar .flatpickr-current-month .numInputWrapper{
+  width: 5.2ch;
+  margin: 0 !important;
+  line-height: 24px !important;
+  height: 24px !important;
+}
+
+.flatpickr-calendar .flatpickr-current-month input.cur-year{
+  width:100%;
+  padding:0 !important;
+  margin:0 !important;
+  line-height: 24px !important;
+  height: 24px !important;
+
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+
+  -moz-appearance:textfield;
+}
+.flatpickr-calendar input.cur-year::-webkit-outer-spin-button,
+.flatpickr-calendar input.cur-year::-webkit-inner-spin-button{
+  -webkit-appearance:none;
+  margin:0;
+}
+
+.flatpickr-calendar .flatpickr-current-month .numInputWrapper span.arrowUp,
+.flatpickr-calendar .flatpickr-current-month .numInputWrapper span.arrowDown{
+  display:none !important;
+}
+
+.flatpickr-calendar .flatpickr-current-month .cur-month:hover,
+.flatpickr-calendar .flatpickr-current-month input.cur-year:hover,
+.flatpickr-calendar .flatpickr-current-month .numInputWrapper:hover,
+.flatpickr-calendar .flatpickr-prev-month:hover,
+.flatpickr-calendar .flatpickr-next-month:hover{
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.fc .fc-scroller,
+.fc .fc-scroller-liquid-absolute{
+  overflow: visible !important;
+  height: auto !important;
+}
+.fc .fc-view-harness,
+.fc .fc-view-harness-active{
+  height: auto !important;
+}
+
+.fc .fc-button:focus,
+.fc .fc-button:active,
+.fc .fc-button:focus-visible{
+  outline:none !important;
+  box-shadow:none !important;
+}
+
+.fc-event { cursor: pointer; }
+
+.fc-hover-tooltip{
+  position: fixed;
+  display: none;
+  z-index: 999999;
+  max-width: 320px;
+  pointer-events: none;
+
+  background: #fff;
+  color: #111827;
+  border: 1px solid rgba(17,24,39,.10);
+  border-radius: 12px;
+  box-shadow: 0 18px 45px rgba(0,0,0,.18);
+  padding: 10px 12px;
+
+  font-size: 13px;
+  line-height: 1.35;
+}
+.fc-hover-tooltip .tt-title{
+  font-weight: 800;
+  font-size: 13.5px;
+  margin-bottom: 6px;
+}
+.fc-hover-tooltip .tt-row{
+  display:flex;
+  gap:8px;
+  margin: 2px 0;
+}
+.fc-hover-tooltip .tt-k{ color:#6b7280; min-width: 58px; }
+.fc-hover-tooltip .tt-v{ color:#111827; word-break: break-word; }
+
+:root{
+  --month-cell-height: 150px;
+  --month-event-line: 18px;
+  --month-events-gap: 6px;
+}
+
+.fc-dayGridMonth-view .fc-daygrid-day-frame{
+  height: var(--month-cell-height);
+  overflow: hidden;
+}
+
+.fc-dayGridMonth-view .fc-daygrid-day-events{
+  max-height: calc((var(--month-event-line) * 7) + var(--month-events-gap));
+  overflow: hidden;
+}
+
+.fc-dayGridMonth-view .fc-daygrid-day-bottom{
+  display:flex;
+  justify-content:center;
+  margin-top: 6px;
+}
+.fc-dayGridMonth-view .fc-daygrid-more-link{
+  display:inline-block;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.fc-event-dotline{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  min-width:0;
+}
+.fc-event-dotline .fc-dot{
+  width:8px; height:8px; border-radius:50%;
+  flex: 0 0 auto;
+}
+.fc-event-dotline .fc-dotline-title{
+  flex: 1 1 auto;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.fc-event-dotline .fc-dotline-time{
+  flex: 0 0 auto;
+  margin-left:auto;
+  padding-right: 4px;
+  font-variant-numeric: tabular-nums;
+  opacity:.9;
+}
+
+.fc-dayGridMonth-view .fc-daygrid-event-dot{ display:none !important; }
+.fc-dayGridMonth-view .fc-daygrid-event{ padding: 1px 0 !important; }
+
+.fc .fc-more-popover{
+  z-index: 99999 !important;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.rooms-submenu{ margin-top: 4px; }
+
+.room-subitem{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding: 6px 10px 6px 48px;
+  font-size: 14px;
+  cursor:pointer;
+}
+.room-subitem input{ margin:0; }
+.room-subitem:hover{ background:#f2f5f9; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/uk.js"></script>
+
+<script>
+  const IS_STAFF = {{ is_staff|yesno:"true,false" }};
+
+  // ---------- tiny helpers ----------
+  function $(id) { return document.getElementById(id); }
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(";").shift();
+    return "";
+  }
+
+  function toast(msg) {
+    M.toast({ html: msg });
+  }
+
+  function fmt(dt) {
+    if (!dt) return "-";
+    return new Date(dt).toLocaleString("uk-UA", { hour12: false });
+  }
+
+  function hhmm(dt) {
+    if (!dt) return "";
+    return new Date(dt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function setError(id, msg) {
+    const el = $(id);
+    el.textContent = msg || "Помилка.";
+    el.style.display = msg ? "block" : "none";
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function selectedRoomIdsFromSidebar() {
+    const box = $("roomsSidebar");
+    if (!box) return null;
+
+    return Array.from(box.querySelectorAll('input[type="checkbox"][name="room"]:checked'))
+      .map(cb => cb.value)
+      .filter(Boolean);
+  }
+
+  function ensureTooltipEl() {
+    let el = $("fcHoverTooltip");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "fcHoverTooltip";
+      el.className = "fc-hover-tooltip";
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function placeTooltip(el, x, y) {
+    const pad = 12;
+    const gap = 12;
+
+    el.style.display = "block";
+    el.style.left = "0px";
+    el.style.top = "0px";
+
+    const rect = el.getBoundingClientRect();
+    let left = x + gap;
+    let top = y + gap;
+
+    const maxLeft = window.innerWidth - rect.width - pad;
+    const maxTop = window.innerHeight - rect.height - pad;
+
+    if (left > maxLeft) left = Math.max(pad, x - rect.width - gap);
+    if (top > maxTop) top = Math.max(pad, y - rect.height - gap);
+
+    el.style.left = left + "px";
+    el.style.top = top + "px";
+  }
+
+  function hideTooltip() {
+    const el = $("fcHoverTooltip");
+    if (el) el.style.display = "none";
+  }
+
+  function statusDotColor(status) {
+    if (status === "APPROVED") return "#2e7d32";
+    if (status === "REJECTED") return "#b71c1c";
+    if (status === "CANCELLED") return "#f57c00";
+    return "#6c757d"; // pending / default
+  }
+
+  function buildDotlineDom({ status, title, timeText }) {
+    const wrap = document.createElement("div");
+    wrap.className = "fc-event-dotline";
+
+    const dot = document.createElement("span");
+    dot.className = "fc-dot";
+    dot.style.background = statusDotColor(status);
+
+    const t = document.createElement("span");
+    t.className = "fc-dotline-title";
+    t.textContent = title || "—";
+
+    const tm = document.createElement("span");
+    tm.className = "fc-dotline-time";
+    tm.textContent = timeText || "";
+
+    wrap.appendChild(dot);
+    wrap.appendChild(t);
+    wrap.appendChild(tm);
+    return wrap;
+  }
+
+  async function postJson(url, body) {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: JSON.stringify(body),
+    });
+
+    let data = null;
+    try { data = await resp.json(); } catch (_) {}
+
+    if (!resp.ok || (data && data.ok === false)) {
+      const msg = (data && (data.error || data.detail)) || "Помилка запиту";
+      throw new Error(msg);
+    }
+
+    return data || {};
+  }
+
+  async function cancelBooking(bookingId) {
+    const resp = await fetch(`/api/bookings/${bookingId}/cancel/`, {
+      method: "POST",
+      headers: { "X-CSRFToken": getCookie("csrftoken") }
+    });
+
+    let data = {};
+    try { data = await resp.json(); } catch (_) {}
+
+    if (!resp.ok || data.ok === false) {
+      throw new Error(data.error || "Помилка скасування");
+    }
+  }
+
+  function isSameDay(a, b) {
+    return a.getFullYear() === b.getFullYear()
+      && a.getMonth() === b.getMonth()
+      && a.getDate() === b.getDate();
+  }
+
+  function ceilToNextHour(d) {
+    const x = new Date(d);
+    x.setMinutes(0, 0, 0);
+    if (d.getMinutes() || d.getSeconds() || d.getMilliseconds()) {
+      x.setHours(x.getHours() + 1);
+    }
+    return x;
+  }
+
+  document.addEventListener("DOMContentLoaded", async function () {
+    const bookingModal = M.Modal.init($("bookingModal"));
+    const infoModal = M.Modal.init($("bookingInfoModal"));
+
+    // flatpickr uk locale
+    if (window.flatpickr && flatpickr.l10ns && flatpickr.l10ns.uk) {
+      flatpickr.localize({ ...flatpickr.l10ns.uk, firstDayOfWeek: 1 });
+    }
+
+    const fpCommon = {
+      enableTime: true,
+      time_24hr: true,
+      dateFormat: "Y-m-d\\TH:i",
+      minuteIncrement: 5,
+      minDate: "today",
+      appendTo: document.body,
+      disableMobile: true,
+      locale: "uk",
+      firstDayOfWeek: 1,
+      monthSelectorType: "static",
+    };
+
+    // start/end pickers
+    const fpEnd = flatpickr("#endInput", {
+      ...fpCommon,
+      onChange: function(_, dateStr) { window.__pendingEnd = dateStr; },
+    });
+
+    const fpStart = flatpickr("#startInput", {
+      ...fpCommon,
+      onChange: function(selectedDates, dateStr) {
+        window.__pendingStart = dateStr;
+
+        if (!selectedDates || !selectedDates.length) return;
+        const startDate = selectedDates[0];
+        const currentEnd = fpEnd.selectedDates[0];
+
+        if (!currentEnd || currentEnd <= startDate) {
+          const newEnd = new Date(startDate);
+          newEnd.setHours(newEnd.getHours() + 1);
+          fpEnd.setDate(newEnd, true);
+          window.__pendingEnd = fpEnd.input.value;
+        }
+      },
+    });
+
+    
+    const roomsResp = await fetch("/api/rooms/");
+    const rooms = await roomsResp.json();
+
+    const roomSelect = $("roomSelect");
+    roomSelect.innerHTML = rooms
+      .map(r => `<option value="${r.id}">${r.name} (${r.capacity} місць)</option>`)
+      .join("");
+    M.FormSelect.init(roomSelect);
+
+    const roomsSidebar = $("roomsSidebar");
+    if (roomsSidebar) {
+      roomsSidebar.classList.add("rooms-submenu");
+      roomsSidebar.innerHTML = rooms.map(r => `
+        <label class="menu-subitem room-subitem">
+          <input type="checkbox" name="room" value="${r.id}" checked>
+          <span>${r.name}</span>
+        </label>
+      `).join("");
+    }
+
+    const calendarEl = $("calendar");
+    const ttEl = ensureTooltipEl();
+
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: "dayGridMonth",
+      headerToolbar: {
+        left: "prev,next today",
+        center: "title",
+        right: "dayGridMonth,timeGridWeek,timeGridDay",
+      },
+
+      locale: "uk",
+      firstDay: 1,
+      buttonText: { today: "Сьогодні", month: "Місяць", week: "Тиждень", day: "День" },
+
+      timeZone: "local",
+      slotMinTime: "08:00:00",
+      slotMaxTime: "20:00:00",
+      allDaySlot: false,
+
+      selectable: true,
+      selectMirror: true,
+
+      height: "auto",
+      contentHeight: "auto",
+      expandRows: true,
+
+      dayMaxEvents: 4,
+      moreLinkClick: "popover",
+      moreLinkContent: function(arg) {
+        const total = (arg.allSegs && arg.allSegs.length) ? arg.allSegs.length : (arg.num + 4);
+        return { html: `показати всі ${total}` };
+      },
+
+      events: function(fetchInfo, successCallback, failureCallback) {
+        const roomIds = selectedRoomIdsFromSidebar();
+
+        const url = new URL("/api/bookings/", window.location.origin);
+        url.searchParams.set("start", fetchInfo.startStr);
+        url.searchParams.set("end", fetchInfo.endStr);
+
+        if (roomIds !== null) {
+          if (roomIds.length === 0) { successCallback([]); return; }
+          url.searchParams.set("rooms", roomIds.join(","));
+        }
+
+        fetch(url.toString())
+          .then(r => r.json())
+          .then(successCallback)
+          .catch(failureCallback);
+      },
+
+      eventContent: function(arg) {
+        if (arg.view.type !== "dayGridMonth") return true;
+
+        const p = arg.event.extendedProps || {};
+        const status = p.status || "PENDING";
+        const roomName = p.roomName || arg.event.title || "—";
+        const timeText = arg.event.start ? hhmm(arg.event.start) : "";
+
+        const node = buildDotlineDom({ status, title: roomName, timeText });
+        return { domNodes: [node] };
+      },
+
+      eventDidMount: function(arg) {
+        const ev = arg.event;
+        const p = ev.extendedProps || {};
+
+        const title = escapeHtml(ev.title || "Бронювання");
+        const place = escapeHtml(p.roomName || "-");
+        const who = escapeHtml(p.bookedBy || "-");
+        const start = escapeHtml(fmt(ev.start));
+        const end = escapeHtml(fmt(ev.end));
+
+        const html =
+          `<div class="tt-title">${title}</div>
+           <div class="tt-row"><div class="tt-k">Місце:</div><div class="tt-v">${place}</div></div>
+           <div class="tt-row"><div class="tt-k">Час:</div><div class="tt-v">${start} — ${end}</div></div>
+           <div class="tt-row"><div class="tt-k">Хто:</div><div class="tt-v">${who}</div></div>`;
+
+        const onEnter = (e) => { ttEl.innerHTML = html; placeTooltip(ttEl, e.clientX, e.clientY); };
+        const onMove = (e) => placeTooltip(ttEl, e.clientX, e.clientY);
+        const onLeave = () => hideTooltip();
+
+        arg.el.addEventListener("mouseenter", onEnter);
+        arg.el.addEventListener("mousemove", onMove);
+        arg.el.addEventListener("mouseleave", onLeave);
+        arg.el._ttHandlers = { onEnter, onMove, onLeave };
+      },
+
+      eventWillUnmount: function(arg) {
+        const h = arg.el && arg.el._ttHandlers;
+        if (h) {
+          arg.el.removeEventListener("mouseenter", h.onEnter);
+          arg.el.removeEventListener("mousemove", h.onMove);
+          arg.el.removeEventListener("mouseleave", h.onLeave);
+          arg.el._ttHandlers = null;
+        }
+      },
+
+      select: function(info) {
+        const now = new Date();
+
+          if (info.allDay) {
+          const today = new Date(); today.setHours(0,0,0,0);
+          const clicked = new Date(info.start); clicked.setHours(0,0,0,0);
+
+          if (clicked < today) {
+            toast("Не можна створювати бронювання в минулому");
+            calendar.unselect();
+            return;
+          }
+        } else {
+          if (info.start < now) {
+            toast("Не можна створювати бронювання в минулому");
+            calendar.unselect();
+            return;
+          }
+        }
+
+                if (info.allDay) {
+          const clickedDay = new Date(info.start);
+
+          let start;
+          if (isSameDay(clickedDay, now)) {
+            start = ceilToNextHour(now);
+            start.setFullYear(clickedDay.getFullYear(), clickedDay.getMonth(), clickedDay.getDate());
+          } else {
+            start = new Date(clickedDay);
+            start.setHours(9, 0, 0, 0);
+          }
+
+          const end = new Date(start);
+          end.setHours(start.getHours() + 1);
+
+          fpStart.setDate(start, true);
+          fpEnd.setDate(end, true);
+
+          window.__pendingStart = fpStart.input.value;
+          window.__pendingEnd = fpEnd.input.value;
+
+          setError("bookingError", "");
+          M.updateTextFields();
+          bookingModal.open();
+          return;
+        }
+
+        fpStart.setDate(info.start, true);
+        fpEnd.setDate(info.end, true);
+
+        window.__pendingStart = fpStart.input.value;
+        window.__pendingEnd = fpEnd.input.value;
+
+        setError("bookingError", "");
+        M.updateTextFields();
+        bookingModal.open();
+      },
+
+      eventClick: function(info) {
+        const ev = info.event;
+        const p = ev.extendedProps || {};
+        const statusText = p.statusLabel || p.status || "-";
+
+        $("infoRoom").textContent = p.roomName || "-";
+        $("infoStart").textContent = fmt(ev.start);
+        $("infoEnd").textContent = fmt(ev.end);
+        $("infoStatus").textContent = statusText;
+        $("infoUser").textContent = p.bookedBy || "-";
+
+        setError("infoError", "");
+
+        const footer = $("infoFooter");
+        footer.innerHTML = `<a href="#!" class="modal-close waves-effect waves-light btn-flat">Закрити</a>`;
+
+        const isFinal = (p.status === "CANCELLED" || p.status === "REJECTED");
+        const canCancel = (IS_STAFF || p.isMine) && !isFinal;
+
+        if (canCancel) {
+          const cancelBtn = document.createElement("a");
+          cancelBtn.href = "#!";
+          cancelBtn.className = "waves-effect waves-light btn orange darken-2";
+          cancelBtn.style.marginRight = "8px";
+          cancelBtn.textContent = "Скасувати";
+
+          cancelBtn.addEventListener("click", async () => {
+            setError("infoError", "");
+            if (!confirm("Скасувати це бронювання?")) return;
+
+            cancelBtn.classList.add("disabled");
+            cancelBtn.textContent = "Скасовую...";
+
+            try {
+              await cancelBooking(ev.id);
+            } catch (e) {
+              cancelBtn.classList.remove("disabled");
+              cancelBtn.textContent = "Скасувати";
+              setError("infoError", e.message || "Помилка скасування");
+              return;
+            }
+
+            $("infoStatus").textContent = "Скасовано";
+            cancelBtn.remove();
+            calendar.refetchEvents();
+          });
+
+          footer.prepend(cancelBtn);
+        }
+
+        infoModal.open();
+      },
+    });
+
+    calendar.render();
+    window.addEventListener("scroll", hideTooltip, { passive: true });
+
+    if (roomsSidebar) {
+      roomsSidebar.addEventListener("change", function(e) {
+        if (e.target && e.target.matches('input[type="checkbox"][name="room"]')) {
+          calendar.refetchEvents();
+        }
+      });
+    }
+
+    $("saveBookingBtn").addEventListener("click", async function() {
+      setError("bookingError", "");
+
+      const roomId = roomSelect.value;
+      if (!roomId) { setError("bookingError", "Оберіть переговорну."); return; }
+
+      const startStr = fpStart.input.value;
+      const endStr = fpEnd.input.value;
+
+      if (!startStr || !endStr) { setError("bookingError", "Вкажіть початок і кінець."); return; }
+
+      const startDt = new Date(startStr);
+      const endDt = new Date(endStr);
+      const now = new Date();
+
+      if (isNaN(startDt.getTime()) || isNaN(endDt.getTime())) { setError("bookingError", "Некоректна дата/час."); return; }
+      if (endDt <= startDt) { setError("bookingError", "Кінець має бути пізніше за початок."); return; }
+      if (startDt < now) { setError("bookingError", "Не можна бронювати в минулому."); return; }
+
+      try {
+        await postJson("/api/bookings/", { room_id: roomId, start: startStr, end: endStr });
+      } catch (e) {
+        setError("bookingError", e.message || "Помилка створення бронювання.");
+        return;
+      }
+
+      bookingModal.close();
+      calendar.refetchEvents();
+      calendar.unselect();
+    });
+  });
+</script>
+{% endblock %}

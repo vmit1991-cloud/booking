@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Заявки на підтвердження{% endblock %}
+
+{% block content %}
+  <h4>Заявки (PENDING)</h4>
+
+  {% if not pending %}
+    <p>Немає заявок.</p>
+  {% else %}
+    <table class="striped">
+      <thead>
+        <tr>
+          <th>Кімната</th>
+          <th>Початок</th>
+          <th>Кінець</th>
+          <th>Хто</th>
+          <th style="width:240px;">Дії</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in pending %}
+          <tr>
+            <td>{{ b.room.name }}</td>
+            <td>{{ b.start }}</td>
+            <td>{{ b.end }}</td>
+            <td>{{ b.user.username }}</td>
+            <td>
+              <a href="#!" class="btn green" onclick="approve({{ b.id }})">Approve</a>
+              <a href="#!" class="btn red" onclick="rejectB({{ b.id }})">Reject</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return "";
+  }
+
+  function approve(id) {
+    fetch(`/api/bookings/${id}/approve/`, { method: "POST", headers: { "X-CSRFToken": getCookie("csrftoken") } })
+      .then(r => r.json())
+      .then(res => {
+        if (!res.ok) return alert(res.error || "Approve error");
+        location.reload();
+      });
+  }
+
+  function rejectB(id) {
+    fetch(`/api/bookings/${id}/reject/`, { method: "POST", headers: { "X-CSRFToken": getCookie("csrftoken") } })
+      .then(r => r.json())
+      .then(res => {
+        if (!res.ok) return alert(res.error || "Reject error");
+        location.reload();
+      });
+  }
+</script>
+{% endblock %}

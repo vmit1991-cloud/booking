@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Створити користувача{% endblock %}
+
+{% block content %}
+  <div class="row" style="margin-top: 4px;">
+    <div class="col s12">
+      <div class="card">
+        <div class="card-content">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <span class="card-title">Створити користувача</span>
+            <a class="btn grey" href="{% url 'admin_users' %}">
+              Назад <i class="material-icons right">arrow_back</i>
+            </a>
+          </div>
+
+          {% if error %}
+            <div class="card-panel red lighten-4 red-text text-darken-4" style="margin-top: 12px;">
+              {{ error }}
+            </div>
+          {% endif %}
+
+          <form method="post" style="margin-top: 12px;">
+            {% csrf_token %}
+
+            <div class="input-field">
+              <input id="username" name="username" type="text" required>
+              <label for="username">Username*</label>
+            </div>
+
+            <div class="input-field">
+              <input id="email" name="email" type="email">
+              <label for="email">Email</label>
+            </div>
+
+            <div class="input-field">
+              <input id="first_name" name="first_name" type="text">
+              <label for="first_name">Ім’я</label>
+            </div>
+
+            <div class="input-field">
+              <input id="last_name" name="last_name" type="text">
+              <label for="last_name">Прізвище</label>
+            </div>
+
+            <div class="input-field">
+              <input id="password1" name="password1" type="password" required>
+              <label for="password1">Пароль*</label>
+            </div>
+
+            <div class="input-field">
+              <input id="password2" name="password2" type="password" required>
+              <label for="password2">Повторіть пароль*</label>
+            </div>
+
+            <p>
+              <label>
+                <input type="checkbox" name="is_active" checked />
+                <span>Активний</span>
+              </label>
+            </p>
+
+            <p>
+              <label>
+                <input type="checkbox" name="is_staff" />
+                <span>Staff (адмін-доступ)</span>
+              </label>
+            </p>
+
+            <p>
+              <label>
+                <input type="checkbox" name="is_superuser" />
+                <span>Superuser</span>
+              </label>
+            </p>
+
+            <button class="btn waves-effect waves-light green" type="submit">
+              Створити <i class="material-icons right">person_add</i>
+            </button>
+          </form>
+
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

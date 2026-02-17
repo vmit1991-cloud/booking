@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Редагування переговорної{% endblock %}
+
+{% block content %}
+  <div class="row" style="margin-top: 4px;">
+    <div class="col s12">
+      <div class="card">
+        <div class="card-content">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <span class="card-title">Редагувати переговорну</span>
+            <a class="btn grey" href="{% url 'admin_rooms' %}">
+              Назад <i class="material-icons right">arrow_back</i>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col s12 m7">
+      <div class="card">
+        <div class="card-content">
+
+          <form method="post">
+            {% csrf_token %}
+
+            <div class="input-field">
+              <input id="name" name="name" type="text" required value="{{ room.name }}">
+              <label class="active" for="name">Назва</label>
+            </div>
+
+            <div class="input-field">
+              <input id="capacity" name="capacity" type="number" min="1" required value="{{ room.capacity }}">
+              <label class="active" for="capacity">Кількість місць</label>
+            </div>
+
+            <p>
+              <label>
+                <input type="checkbox" name="has_projector" {% if room.has_projector %}checked{% endif %}>
+                <span>Проектор</span>
+              </label>
+            </p>
+
+            <p>
+              <label>
+                <input type="checkbox" name="has_speakerphone" {% if room.has_speakerphone %}checked{% endif %}>
+                <span>Спікерфон</span>
+              </label>
+            </p>
+
+            <p>
+              <label>
+                <input type="checkbox" name="has_tv" {% if room.has_tv %}checked{% endif %}>
+                <span>Телевізор</span>
+              </label>
+            </p>
+
+            <p>
+              <label>
+                <input type="checkbox" name="has_whiteboard" {% if room.has_whiteboard %}checked{% endif %}>
+                <span>Маркерна дошка</span>
+              </label>
+            </p>
+
+            <div style="margin-top:16px; display:flex; gap:10px;">
+              <button class="btn waves-effect waves-light" type="submit">
+                Зберегти <i class="material-icons right">save</i>
+              </button>
+
+              <a class="btn red" href="{% url 'admin_room_delete' room.id %}">
+                Видалити <i class="material-icons right">delete</i>
+              </a>
+            </div>
+
+          </form>
+
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

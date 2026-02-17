@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Booking{% endblock %}</title>
+
+  <!-- libs -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+
+  <style>
+    /* сторінка скролиться вся */
+    html, body { height: auto; }
+    body { overflow-y: auto; }
+
+    nav { background: #2196F3; }
+
+    /* layout: sidebar + контент */
+    .layout {
+      display: flex;
+      min-height: calc(100vh - 64px); /* висота navbar у Materialize */
+      height: auto;
+      align-items: stretch;
+    }
+
+    /* sidebar без скролу */
+    .sidebar {
+      width: 280px;
+      border-right: 1px solid #e0e0e0;
+      background: #fafafa;
+      padding: 12px 0;
+      overflow: visible;
+    }
+
+    /* контент не обрізає overflow */
+    .content {
+      flex: 1;
+      padding: 20px;
+      min-width: 0;
+      min-height: 0;
+      overflow: visible;
+    }
+
+    .menu-title {
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #546e7a;
+      text-transform: uppercase;
+    }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      color: #263238;
+    }
+
+    .menu-item:hover { background: #eeeeee; }
+    .menu-subitem { padding-left: 54px; }
+  </style>
+
+  {% block extra_head %}{% endblock %}
+  {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+  <nav>
+    <div class="nav-wrapper" style="background:#2196F3;">
+      <a class="brand-logo" style="padding-left:16px;">Booking</a>
+      <ul class="right">
+        <li>
+          <a href="/logout/">
+            <i class="material-icons left">logout</i>Вийти
+          </a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="layout">
+    {% include "includes/sidebar.html" %}
+
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

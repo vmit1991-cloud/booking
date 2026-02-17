@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Вхід</title>
+
+  <!-- Materialize (Material Design) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      background: linear-gradient(135deg, rgba(33,150,243,.08), rgba(156,39,176,.08));
+    }
+    .auth-card { border-radius: 18px; overflow: hidden; }
+    .auth-header {
+      padding: 24px 24px 10px;
+      background: linear-gradient(135deg, #2196F3, #9C27B0);
+      color: white;
+    }
+    .auth-body { padding: 22px 24px 6px; }
+    .auth-footer { padding: 0 24px 22px; }
+    .btn-wide { width: 100%; border-radius: 12px; }
+  </style>
+</head>
+
+<body>
+  <div class="container" style="max-width: 520px;">
+    <div class="card auth-card z-depth-2">
+      <div class="auth-header">
+        <h5 style="margin:0;">Вхід у систему</h5>
+        <p style="margin:8px 0 0; opacity:.9;">Booking</p>
+      </div>
+
+      <div class="auth-body">
+      	{% if error %}
+  		<div class="card-panel red lighten-4 red-text text-darken-4" style="border-radius:12px;">
+  			  {{ error }}
+ 			 </div>
+			{% endif %}
+        <form method="post" autocomplete="on">
+        	{% csrf_token %}
+          <!-- поки просто форма, далі підв’яжемо Django auth -->
+          <div class="input-field">
+            <i class="material-icons prefix">person</i>
+            <input id="username" name="username" type="text" required autocomplete="username">
+            <label for="username">Логін</label>
+          </div>
+
+          <div class="input-field">
+            <i class="material-icons prefix">lock</i>
+            <input id="password" name="password" type="password" required autocomplete="current-password">
+            <label for="password">Пароль</label>
+          </div>
+
+          <div class="auth-footer">
+            <button class="btn waves-effect waves-light btn-wide" type="submit">
+              Увійти
+              <i class="material-icons right">login</i>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+</body>
+</html>
