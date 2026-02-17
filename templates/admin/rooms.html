@@ -79,9 +79,12 @@
                     <i class="material-icons">edit</i>
                   </a>
 
-                  <a class="btn red" href="{% url 'admin_room_delete' r.id %}" title="Видалити">
-                    <i class="material-icons">delete</i>
-                  </a>
+                  <form method="post" action="{% url 'admin_room_delete' room.id %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn red waves-effect waves-light">
+                      Видалити
+                    </button>
+                  </form>
                 </td>
               </tr>
               {% empty %}
