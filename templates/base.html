@@ -67,6 +67,35 @@
 
     .menu-item:hover { background: #eeeeee; }
     .menu-subitem { padding-left: 54px; }
+    .logout-form { margin: 0; }
+    .logout-btn{
+      background: transparent;
+      border: 0;
+      color: #fff;
+      cursor: pointer;
+
+      height: 64px;                 /* висота navbar в Materialize */
+      line-height: 64px;
+      padding: 0 15px;
+      display: inline-flex;
+      align-items: center;
+
+      font: inherit;
+      text-transform: none;
+    }
+    .logout-btn:hover{
+      background: rgba(255,255,255,.12);
+    }
+    .logout-btn:focus{
+      outline: none;
+      background: rgba(255,255,255,.12);
+    }
+    .logout-btn i.material-icons{
+      line-height: 64px;
+      height: 64px;
+      display: inline-flex;
+      align-items: center;
+    }
   </style>
 
   {% block extra_head %}{% endblock %}
@@ -78,10 +107,13 @@
     <div class="nav-wrapper" style="background:#2196F3;">
       <a class="brand-logo" style="padding-left:16px;">Booking</a>
       <ul class="right">
-        <li>
-          <a href="/logout/">
-            <i class="material-icons left">logout</i>Вийти
-          </a>
+        <li class="logout-li">
+          <form method="post" action="{% url 'logout' %}" class="logout-form">
+          {% csrf_token %}
+            <button type="submit" class="logout-btn">
+              <i class="material-icons left">logout</i><span>Вийти</span>
+            </button>
+          </form>
         </li>
       </ul>
     </div>
