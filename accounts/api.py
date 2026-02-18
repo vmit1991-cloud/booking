@@ -13,11 +13,17 @@ from django.views.decorators.http import require_http_methods
 from .models import Booking, MeetingRoom
 
 
-WORK_DAYS = {0, 1, 2, 3, 4}
-WORK_START = time(9, 0)
-WORK_END = time(18, 0)
+# ===========================
+# WORKING HOURS CONFIG
+# ===========================
+WORK_DAYS = {0, 1, 2, 3, 4}  # Mon-Fri
+WORK_START = time(8, 0)     # 08:00
+WORK_END = time(20, 0)      # 20:00 (end may be exactly 20:00)
 
 
+# ===========================
+# HELPERS
+# ===========================
 def _json_ok(extra=None):
     data = {"ok": True}
     if extra:
@@ -61,24 +67,44 @@ def _ensure_aware(dt):
     return timezone.make_aware(dt, timezone.get_current_timezone())
 
 
+def _to_local(dt):
+    """Convert datetime to local timezone from settings (Europe/Kyiv)."""
+    dt = _ensure_aware(dt)
+    if dt is None:
+        return None
+    return timezone.localtime(dt)
+
+
 def _is_within_working_hours(start, end) -> bool:
+    """
+    Booking must be:
+      - same day
+      - Mon-Fri
+      - within 08:00..20:00 (end may be exactly 20:00)
+    All checks are in LOCAL timezone.
+    """
     if not start or not end:
         return False
 
-    start = _ensure_aware(start)
-    end = _ensure_aware(end)
+    start_local = _to_local(start)
+    end_local = _to_local(end)
 
-    if end <= start:
+    if not start_local or not end_local:
         return False
 
-    if start.date() != end.date():
+    if end_local <= start_local:
         return False
 
-    if start.weekday() not in WORK_DAYS:
+    # Must be same local date
+    if start_local.date() != end_local.date():
         return False
 
-    st = start.timetz().replace(tzinfo=None)
-    en = end.timetz().replace(tzinfo=None)
+    # Workdays only
+    if start_local.weekday() not in WORK_DAYS:
+        return False
+
+    st = start_local.time()
+    en = end_local.time()
 
     if st < WORK_START:
         return False
@@ -112,6 +138,9 @@ def _get_room_ids_from_query(request) -> list[int]:
     return room_ids
 
 
+# ===========================
+# API
+# ===========================
 @login_required
 @require_http_methods(["GET"])
 def api_rooms(request):
@@ -171,6 +200,7 @@ def api_bookings(request):
 
         return JsonResponse(events, safe=False)
 
+    # POST: create booking
     payload = _parse_body_json(request)
     if payload is None:
         return _json_error("Bad JSON", status=400)
@@ -191,7 +221,7 @@ def api_bookings(request):
 
     if not _is_within_working_hours(start, end):
         return _json_error(
-            "Бронювання дозволено тільки в робочий час (Пн–Пт, 09:00–18:00).",
+            "Бронювання дозволено тільки в робочий час (Пн–Пт, 08:00–20:00).",
             status=400,
         )
 
@@ -245,7 +275,7 @@ def api_booking_approve(request, booking_id):
 
     if not _is_within_working_hours(booking.start, booking.end):
         return _json_error(
-            "Не можна підтвердити бронювання поза робочим часом (Пн–Пт, 09:00–18:00).",
+            "Не можна підтвердити бронювання поза робочим часом (Пн–Пт, 08:00–20:00).",
             status=400,
         )
 
