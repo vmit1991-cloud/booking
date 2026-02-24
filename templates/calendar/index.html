@@ -1,28 +1,36 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Переговорні{% endblock %}
+
 {% block content %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
 <div class="day-page">
   <div class="page-head">
     <div>
       <h4 id="pageTitle" class="page-title">Переговорні на день</h4>
       <div id="pageSubtitle" class="page-subtitle grey-text text-darken-1"></div>
     </div>
+
     <div class="head-row">
       <div class="datectl" aria-label="Навігація по даті">
         <button id="prevBtn" type="button" class="date-nav" title="Назад">◀</button>
+
         <button id="dateBtn" type="button" class="date-btn" title="Обрати дату">
           <span id="dateLabel">—</span>
         </button>
+
         <button id="nextBtn" type="button" class="date-nav" title="Вперед">▶</button>
+
         <input id="dateInput" class="date-hidden" type="text" autocomplete="off">
       </div>
+
       <div class="popwrap">
         <button id="filterBtn" type="button" class="btn-flat filter-btn">
           <i class="material-icons" style="font-size:18px;">tune</i>
           <span>Фільтр переговорних</span>
         </button>
+
         <div id="filterPop" class="popover" aria-hidden="true">
           <div class="dd-head">
             <div class="section-title">Переговорні</div>
@@ -30,34 +38,42 @@
               <i class="material-icons" style="font-size:18px;">close</i>
             </button>
           </div>
+
           <div id="roomsList" class="rooms">
             <div class="rooms-hint">Завантаження…</div>
           </div>
+
           <div class="adv">
             <button id="advBtn" class="adv-toggle" type="button" aria-expanded="false">
               <span>Розширений фільтр</span>
               <i id="advIc" class="material-icons" style="font-size:18px; color:#90a4ae;">expand_more</i>
             </button>
+
             <div id="advBody" class="adv-body" aria-hidden="true">
               <div class="field" style="margin-top:10px;">
                 <div class="label">Кількість місць</div>
                 <input id="minSeats" type="number" min="0" placeholder="0" class="mini-number">
               </div>
+
               <div class="field" style="margin-top:10px;">
                 <div class="label">Обладнання</div>
+
                 <div class="checks">
                   <label class="check-native">
                     <input type="checkbox" id="eqProjector">
                     <span>Проектор</span>
                   </label>
+
                   <label class="check-native">
                     <input type="checkbox" id="eqMic">
                     <span>Спікерфон</span>
                   </label>
+
                   <label class="check-native">
                     <input type="checkbox" id="eqTv">
                     <span>Телевізор</span>
                   </label>
+
                   <label class="check-native">
                     <input type="checkbox" id="eqBoard">
                     <span>Маркерна дошка</span>
@@ -66,20 +82,30 @@
               </div>
             </div>
           </div>
+
           <div class="pop-footer">
             <button id="roomsClear" type="button" class="action-btn">Очистити</button>
             <button id="applyFilters" type="button" class="okbtn">Ок</button>
           </div>
         </div>
       </div>
+
       <button id="openNewBookingBtn" type="button" class="btn waves-effect waves-light">
         <i class="material-icons left">add</i>Нове бронювання
       </button>
+
       <div class="view-toggle" role="tablist" aria-label="Режим перегляду">
         <button id="btnDay" type="button" class="vt-btn is-active" aria-selected="true">День</button>
         <button id="btnWeek" type="button" class="vt-btn" aria-selected="false">Тиждень</button>
       </div>
     </div>
+    <div id="activeFiltersBar" class="af-bar" style="display:none;">
+  <div class="af-left">
+    <span class="af-title">Фільтри:</span>
+    <div id="activeFiltersChips" class="af-chips"></div>
+  </div>
+  <button id="activeFiltersClear" type="button" class="af-clear">Очистити</button>
+</div>
   </div>
   <div id="dayView" class="card">
     <div class="card-content">
@@ -93,11 +119,14 @@
           <span class="pill busy">Зайнято</span>
         </div>
       </div>
+
       <div class="occupancy-table">
         <div class="occ-header">
           <div class="col-room">ПЕРЕГОВОРНА</div>
           <div class="col-eq">ОБЛАДНАННЯ</div>
-          <div class="col-scale"><div id="scaleHeader" class="scale-header"></div></div>
+          <div class="col-scale">
+            <div id="scaleHeader" class="scale-header"></div>
+          </div>
         </div>
 
         <div id="occBody" class="occ-body">
@@ -112,11 +141,13 @@
         <div>
           <div class="table-title">Зайнятість на тиждень</div>
         </div>
+
         <div class="legend">
           <span class="pill free">Вільно</span>
           <span class="pill busy">Зайнято</span>
         </div>
       </div>
+
       <div class="week-table">
         <div class="wk-header">
           <div class="wk-col-room">ПЕРЕГОВОРНА</div>
@@ -125,6 +156,7 @@
             <div id="daysHours" class="days-hours"></div>
           </div>
         </div>
+
         <div id="wkBody" class="wk-body">
           <div class="grey-text" style="padding: 12px;">Завантаження...</div>
         </div>
@@ -133,17 +165,31 @@
   </div>
 </div>
 <div id="bookingOverlay" class="b-overlay" style="display:none;"></div>
+
 <div id="bookingModal" class="b-modal" style="display:none;" role="dialog" aria-modal="true" aria-hidden="true">
   <div class="b-modal-head">
     <div class="b-title">Нове бронювання</div>
     <button type="button" id="closeXBtn" class="b-x" aria-label="Закрити">×</button>
   </div>
+
   <div class="b-modal-body">
+    <!-- показує вибрану дату (JS заповнює) -->
+    <div id="modalDateHint" class="b-subtitle" style="margin:-2px 0 10px; color:#607d8b; font-size:13px;">
+      Дата бронювання: <b id="modalDateText">—</b>
+    </div>
+
     <div class="b-grid">
       <div class="b-field b-span2">
         <div class="b-label">Переговорна</div>
         <select id="modalRoomSelect" class="browser-default"></select>
       </div>
+
+      <!-- ДОДАЛИ ДАТУ -->
+      <div class="b-field b-span2">
+        <div class="b-label">Дата</div>
+        <input id="modalDate" type="text" autocomplete="off" class="b-input">
+      </div>
+
       <div class="b-field">
         <div class="b-label">Початок</div>
         <div class="b-time-wrap">
@@ -151,6 +197,7 @@
           <i class="material-icons b-time-ic js-open-time" data-target="modalStart" title="Обрати час">schedule</i>
         </div>
       </div>
+
       <div class="b-field">
         <div class="b-label">Кінець</div>
         <div class="b-time-wrap">
@@ -158,42 +205,50 @@
           <i class="material-icons b-time-ic js-open-time" data-target="modalEnd" title="Обрати час">schedule</i>
         </div>
       </div>
+
       <div class="b-field b-span2">
         <div class="b-label">Назва (необовʼязково)</div>
         <input id="modalTitle" type="text" maxlength="120" class="b-input">
       </div>
     </div>
   </div>
+
   <div class="b-modal-footer">
     <button type="button" id="cancelBookingBtn" class="btn-flat">Скасувати</button>
     <button type="button" id="createBookingBtn" class="btn waves-effect waves-light">Створити</button>
   </div>
 </div>
 <div id="viewOverlay" class="b-overlay" style="display:none;"></div>
+
 <div id="viewModal" class="b-modal b-modal-sm" style="display:none;" role="dialog" aria-modal="true" aria-hidden="true">
   <div class="b-modal-head">
     <div class="b-title">Бронювання</div>
     <button type="button" id="closeViewXBtn" class="b-x" aria-label="Закрити">×</button>
   </div>
+
   <div class="b-modal-body">
     <div class="v-row">
       <div class="v-label">Подія</div>
       <div id="vTitle" class="v-val">—</div>
     </div>
+
     <div class="v-row">
       <div class="v-label">Час</div>
       <div id="vTime" class="v-val">—</div>
     </div>
+
     <div class="v-row">
       <div class="v-label">Автор</div>
       <div id="vBy" class="v-val">—</div>
     </div>
   </div>
+
   <div class="b-modal-footer">
     <button type="button" id="closeViewBtn" class="btn-flat">Закрити</button>
     <button type="button" id="cancelEventBtn" class="btn red lighten-1" style="display:none;">Скасувати</button>
   </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/uk.js"></script>
 <script src="{% static 'js/scripts.js' %}"></script>

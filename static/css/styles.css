@@ -1216,3 +1216,72 @@ body{
   display: none !important;
   content: none !important;
 }
+.af-bar{
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #e6edf3;
+  border-radius: 10px;
+  background: #fff;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+}
+
+.af-left{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.af-title{
+  font-weight: 600;
+  font-size: 13px;
+  color:#455a64;
+  white-space: nowrap;
+}
+
+.af-chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.af-chip{
+  display:inline-flex;
+  align-items:center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f2f6ff;
+  border: 1px solid #dbe7ff;
+  color:#1e3a8a;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.af-chip .x{
+  border:0;
+  background: transparent;
+  cursor:pointer;
+  padding: 0;
+  line-height: 1;
+  font-size: 16px;
+  color:#607d8b;
+}
+
+.af-clear{
+  border: 1px solid #e6edf3;
+  background:#fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor:pointer;
+  font-weight: 600;
+  font-size: 12px;
+  color:#455a64;
+}
+
+.af-clear:hover{ background:#f7fafc; }

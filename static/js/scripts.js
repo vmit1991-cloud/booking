@@ -1,3 +1,7 @@
+/* =========================
+   booking calendar scripts.js
+   ========================= */
+
 const WORK_START_MIN = 8 * 60;
 const WORK_END_MIN = 20 * 60;
 const WORK_TOTAL_MIN = WORK_END_MIN - WORK_START_MIN;
@@ -11,6 +15,9 @@ let _selectedDayForModal = null;
 let _fp = null;
 let _curAnchor = new Date();
 let _suppressOpen = false;
+
+/** modal date picker */
+let _modalDateFp = null;
 
 function pad2(n){ return String(n).padStart(2,"0"); }
 
@@ -124,11 +131,6 @@ function toLocalDateFromDayHHMM(dayDate, hhmm){
   return new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), t.h, t.m, 0, 0);
 }
 
-function toISOFromDayHHMM(dayDate, hhmm){
-  const d = toLocalDateFromDayHHMM(dayDate, hhmm);
-  return d ? d.toISOString() : null;
-}
-
 function isSameLocalDay(a, b){
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -154,10 +156,16 @@ function suggestStartMinForDay(dayDate, fallbackMin){
   return clampToWork(Math.max(fallbackMin, m));
 }
 
+/* =========================
+   filters: popover + advanced
+   ========================= */
+
 function setAdv(open){
   const advBtn = document.getElementById("advBtn");
   const advBody = document.getElementById("advBody");
   const advIc = document.getElementById("advIc");
+  if (!advBtn || !advBody || !advIc) return;
+
   advBody.classList.toggle("open", open);
   advBody.setAttribute("aria-hidden", open ? "false" : "true");
   advBtn.setAttribute("aria-expanded", open ? "true" : "false");
@@ -172,11 +180,14 @@ function getSelectedRoomIds(){
 
 function applyRoomFilters(rooms){
   const selectedIds = getSelectedRoomIds();
-  const capMin = parseInt(document.getElementById("minSeats").value || "0", 10) || 0;
-  const needProjector = document.getElementById("eqProjector").checked;
-  const needMic = document.getElementById("eqMic").checked;
-  const needTV = document.getElementById("eqTv").checked;
-  const needBoard = document.getElementById("eqBoard").checked;
+
+  const minSeatsEl = document.getElementById("minSeats");
+  const capMin = parseInt(minSeatsEl?.value || "0", 10) || 0;
+
+  const needProjector = !!document.getElementById("eqProjector")?.checked;
+  const needMic = !!document.getElementById("eqMic")?.checked;
+  const needTV = !!document.getElementById("eqTv")?.checked;
+  const needBoard = !!document.getElementById("eqBoard")?.checked;
 
   return rooms.filter(r => {
     if (selectedIds && !selectedIds.has(String(r.id))) return false;
@@ -189,7 +200,97 @@ function applyRoomFilters(rooms){
   });
 }
 
+/* =========================
+   Active filters bar (chips)
+   ========================= */
+
+function getActiveFilters(){
+  const out = [];
+
+  // rooms
+  const roomBoxes = Array.from(document.querySelectorAll('input[name="roomFilter"]:checked'));
+  if (roomBoxes.length){
+    const names = roomBoxes.map(b => {
+      const id = String(b.value);
+      const r = _roomsCache.find(x => String(x.id) === id);
+      return r ? r.name : `ID:${id}`;
+    });
+    out.push({ key: "rooms", label: `Переговорні: ${names.join(", ")}` });
+  }
+
+  // seats
+  const capMin = parseInt(document.getElementById("minSeats")?.value || "0", 10) || 0;
+  if (capMin > 0){
+    out.push({ key: "seats", label: `Місць ≥ ${capMin}` });
+  }
+
+  // equipment
+  const eq = [];
+  if (document.getElementById("eqProjector")?.checked) eq.push("Проектор");
+  if (document.getElementById("eqMic")?.checked) eq.push("Спікерфон");
+  if (document.getElementById("eqTv")?.checked) eq.push("Телевізор");
+  if (document.getElementById("eqBoard")?.checked) eq.push("Дошка");
+  if (eq.length){
+    out.push({ key: "eq", label: `Обладнання: ${eq.join(", ")}` });
+  }
+
+  return out;
+}
+
+function renderActiveFiltersBar(){
+  const bar = document.getElementById("activeFiltersBar");
+  const chips = document.getElementById("activeFiltersChips");
+  if (!bar || !chips) return;
+
+  const items = getActiveFilters();
+  if (!items.length){
+    bar.style.display = "none";
+    chips.innerHTML = "";
+    return;
+  }
+
+  bar.style.display = "flex";
+  chips.innerHTML = items.map(it => (
+    `<span class="af-chip" data-key="${escapeHtml(it.key)}">
+      ${escapeHtml(it.label)}
+      <button type="button" class="x" aria-label="Прибрати">×</button>
+    </span>`
+  )).join("");
+}
+
+function clearAllFilters(){
+  document.querySelectorAll('input[name="roomFilter"]').forEach(x => x.checked = false);
+
+  const seats = document.getElementById("minSeats");
+  if (seats) seats.value = "";
+
+  ["eqProjector","eqMic","eqTv","eqBoard"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = false;
+  });
+}
+
+function clearFilterByKey(key){
+  if (key === "rooms"){
+    document.querySelectorAll('input[name="roomFilter"]').forEach(x => x.checked = false);
+  } else if (key === "seats"){
+    const seats = document.getElementById("minSeats");
+    if (seats) seats.value = "";
+  } else if (key === "eq"){
+    ["eqProjector","eqMic","eqTv","eqBoard"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.checked = false;
+    });
+  }
+}
+
+/* =========================
+   rooms list + api
+   ========================= */
+
 function setSelectOptions(selectEl, options, selectedId, placeholderText){
+  if (!selectEl) return;
+
   selectEl.innerHTML = "";
   if (placeholderText){
     const ph = document.createElement("option");
@@ -210,6 +311,8 @@ function setSelectOptions(selectEl, options, selectedId, placeholderText){
 
 function renderRoomsList(rooms){
   const host = document.getElementById("roomsList");
+  if (!host) return;
+
   host.innerHTML = "";
   if (!rooms || !rooms.length){
     host.innerHTML = `<div class="rooms-hint">Немає переговорних.</div>`;
@@ -218,28 +321,34 @@ function renderRoomsList(rooms){
   for (const r of rooms){
     const lbl = document.createElement("label");
     lbl.className = "room-item";
-    lbl.innerHTML = `<input type="checkbox" name="roomFilter" value="${escapeHtml(String(r.id))}"><span class="room-name">${escapeHtml(r.name)}</span>`;
+    lbl.innerHTML =
+      `<input type="checkbox" name="roomFilter" value="${escapeHtml(String(r.id))}">
+       <span class="room-name">${escapeHtml(r.name)}</span>`;
     host.appendChild(lbl);
   }
 }
 
 async function preloadRooms(){
   const rooms = await fetch("/api/rooms/").then(r => r.json());
-  _roomsCache = rooms;
-  setSelectOptions(document.getElementById("modalRoomSelect"), rooms, null, "Оберіть переговорну");
-  renderRoomsList(rooms);
+  _roomsCache = rooms || [];
+  setSelectOptions(document.getElementById("modalRoomSelect"), _roomsCache, null, "Оберіть переговорну");
+  renderRoomsList(_roomsCache);
 }
 
 async function loadBookings(rangeStartISO, rangeEndISO){
   const bookings = await fetch(`/api/bookings/?start=${encodeURIComponent(rangeStartISO)}&end=${encodeURIComponent(rangeEndISO)}`).then(r => r.json());
+
   _bookings = [];
   _lastBookingsById = new Map();
-  for (const b of bookings){
+
+  for (const b of (bookings || [])){
     const roomId = b.extendedProps?.roomId ?? b.roomId ?? b.room_id;
     if (!roomId) continue;
+
     const id = b.id ?? b.extendedProps?.id ?? null;
     const startMs = new Date(b.start).getTime();
     const endMs = new Date(b.end).getTime();
+
     const bk = {
       id,
       roomId,
@@ -249,25 +358,38 @@ async function loadBookings(rangeStartISO, rangeEndISO){
       bookedBy: b.extendedProps?.bookedBy || b.bookedBy || "",
       canCancel: !!(b.extendedProps?.canCancel ?? b.canCancel ?? b.extendedProps?.isOwner ?? b.isOwner),
     };
+
     _bookings.push(bk);
     if (id) _lastBookingsById.set(String(id), bk);
   }
 }
 
+/* =========================
+   modals
+   ========================= */
+
 const overlayEl = () => document.getElementById("bookingOverlay");
 const modalEl = () => document.getElementById("bookingModal");
 
 function openModal(){
-  overlayEl().style.display = "block";
-  modalEl().style.display = "block";
-  modalEl().setAttribute("aria-hidden","false");
+  const o = overlayEl();
+  const m = modalEl();
+  if (!o || !m) return;
+
+  o.style.display = "block";
+  m.style.display = "block";
+  m.setAttribute("aria-hidden","false");
   document.body.style.overflow = "hidden";
 }
 
 function closeModal(){
-  overlayEl().style.display = "none";
-  modalEl().style.display = "none";
-  modalEl().setAttribute("aria-hidden","true");
+  const o = overlayEl();
+  const m = modalEl();
+  if (!o || !m) return;
+
+  o.style.display = "none";
+  m.style.display = "none";
+  m.setAttribute("aria-hidden","true");
   document.body.style.overflow = "";
 }
 
@@ -275,24 +397,67 @@ const viewOverlayEl = () => document.getElementById("viewOverlay");
 const viewModalEl = () => document.getElementById("viewModal");
 
 function openViewModal(){
-  viewOverlayEl().style.display = "block";
-  viewModalEl().style.display = "block";
-  viewModalEl().setAttribute("aria-hidden","false");
+  const o = viewOverlayEl();
+  const m = viewModalEl();
+  if (!o || !m) return;
+
+  o.style.display = "block";
+  m.style.display = "block";
+  m.setAttribute("aria-hidden","false");
   document.body.style.overflow = "hidden";
 }
 
 function closeViewModal(){
-  viewOverlayEl().style.display = "none";
-  viewModalEl().style.display = "none";
-  viewModalEl().setAttribute("aria-hidden","true");
+  const o = viewOverlayEl();
+  const m = viewModalEl();
+  if (!o || !m) return;
+
+  o.style.display = "none";
+  m.style.display = "none";
+  m.setAttribute("aria-hidden","true");
   document.body.style.overflow = "";
+
   const btn = document.getElementById("cancelEventBtn");
-  btn.style.display = "none";
-  btn.dataset.bookingId = "";
+  if (btn){
+    btn.style.display = "none";
+    btn.dataset.bookingId = "";
+  }
+}
+
+/** set modal date (if modalDate/modalDateText exist) */
+function setModalDate(dayDate){
+  const d = dayDate
+    ? new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 0,0,0,0)
+    : null;
+
+  const txtEl = document.getElementById("modalDateText");
+  if (txtEl){
+    txtEl.textContent = d ? formatDMY(d) : "—";
+  }
+
+  const input = document.getElementById("modalDate");
+  if (input){
+    input.value = d ? formatDMY(d) : "";
+  }
+
+  if (_modalDateFp){
+    if (d) _modalDateFp.setDate(d, false);
+    else _modalDateFp.clear();
+  }
 }
 
 function openBookingModal({ roomId, startMin, durationMin, dayDateOverride }){
-  const dayDate = dayDateOverride || (viewMode === "week" ? _selectedDayForModal : parseDMY(document.getElementById("dateInput").value));
+  const dateInput = document.getElementById("dateInput");
+
+  // always decide dayDate
+  const dayDate =
+    dayDateOverride ||
+    (viewMode === "week"
+      ? (_selectedDayForModal || startOfWeekMonday(parseDMY(dateInput?.value) || _curAnchor))
+      : (parseDMY(dateInput?.value) || _curAnchor));
+
+  if (dayDate) setModalDate(dayDate);
+
   const safeStartMin = dayDate ? suggestStartMinForDay(dayDate, startMin) : startMin;
 
   const start = hhmmFromMinutes(safeStartMin);
@@ -306,9 +471,13 @@ function openBookingModal({ roomId, startMin, durationMin, dayDateOverride }){
     setSelectOptions(document.getElementById("modalRoomSelect"), _roomsCache, null, "Оберіть переговорну");
   }
 
-  document.getElementById("modalStart").value = start;
-  document.getElementById("modalEnd").value = end;
-  document.getElementById("modalTitle").value = "";
+  const stEl = document.getElementById("modalStart");
+  const enEl = document.getElementById("modalEnd");
+  const titleEl = document.getElementById("modalTitle");
+  if (stEl) stEl.value = start;
+  if (enEl) enEl.value = end;
+  if (titleEl) titleEl.value = "";
+
   openModal();
 }
 
@@ -316,18 +485,27 @@ function showBookingDetails(booking){
   const title = booking.title ? booking.title : "Без назви";
   const st = new Date(booking.startMs);
   const en = new Date(booking.endMs);
+
   const time = `${pad2(st.getDate())}.${pad2(st.getMonth()+1)} ${pad2(st.getHours())}:${pad2(st.getMinutes())}–${pad2(en.getHours())}:${pad2(en.getMinutes())}`;
-  document.getElementById("vTitle").textContent = title;
-  document.getElementById("vTime").textContent = time;
-  document.getElementById("vBy").textContent = booking.bookedBy || "—";
+
+  const vTitle = document.getElementById("vTitle");
+  const vTime = document.getElementById("vTime");
+  const vBy = document.getElementById("vBy");
+  if (vTitle) vTitle.textContent = title;
+  if (vTime) vTime.textContent = time;
+  if (vBy) vBy.textContent = booking.bookedBy || "—";
+
   const btn = document.getElementById("cancelEventBtn");
-  if (booking.canCancel && booking.id){
-    btn.style.display = "inline-flex";
-    btn.dataset.bookingId = String(booking.id);
-  } else {
-    btn.style.display = "none";
-    btn.dataset.bookingId = "";
+  if (btn){
+    if (booking.canCancel && booking.id){
+      btn.style.display = "inline-flex";
+      btn.dataset.bookingId = String(booking.id);
+    } else {
+      btn.style.display = "none";
+      btn.dataset.bookingId = "";
+    }
   }
+
   openViewModal();
 }
 
@@ -339,22 +517,37 @@ function validateNotPast(startLocal, endLocal){
   return { ok:true };
 }
 
+function getDayDateFromModalOrContext(){
+  // 1) modal flatpickr
+  if (_modalDateFp && _modalDateFp.selectedDates && _modalDateFp.selectedDates[0]){
+    const d = _modalDateFp.selectedDates[0];
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0);
+  }
+
+  // 2) modal input value
+  const modalVal = document.getElementById("modalDate")?.value;
+  const parsed = parseDMY(modalVal);
+  if (parsed) return parsed;
+
+  // 3) fallback
+  if (viewMode === "week"){
+    return _selectedDayForModal
+      ? new Date(_selectedDayForModal.getFullYear(), _selectedDayForModal.getMonth(), _selectedDayForModal.getDate(), 0,0,0,0)
+      : null;
+  }
+  return parseDMY(document.getElementById("dateInput")?.value);
+}
+
 async function createBookingFromModal(){
-  const roomRaw = document.getElementById("modalRoomSelect").value;
+  const roomRaw = document.getElementById("modalRoomSelect")?.value;
   const roomId = parseInt(roomRaw, 10);
   if (!roomRaw || Number.isNaN(roomId)){ toast("Оберіть переговорну"); return; }
 
-  const st = document.getElementById("modalStart").value;
-  const en = document.getElementById("modalEnd").value;
+  const st = document.getElementById("modalStart")?.value;
+  const en = document.getElementById("modalEnd")?.value;
 
-  let dayDate = null;
-  if (viewMode === "week"){
-    dayDate = _selectedDayForModal;
-    if (!dayDate){ toast("Не вибраний день"); return; }
-  } else {
-    dayDate = parseDMY(document.getElementById("dateInput").value);
-    if (!dayDate){ toast("Невірна дата"); return; }
-  }
+  const dayDate = getDayDateFromModalOrContext();
+  if (!dayDate){ toast("Оберіть дату"); return; }
 
   const startLocal = toLocalDateFromDayHHMM(dayDate, st);
   const endLocal = toLocalDateFromDayHHMM(dayDate, en);
@@ -366,7 +559,7 @@ async function createBookingFromModal(){
     room_id: roomId,
     start: startLocal.toISOString(),
     end: endLocal.toISOString(),
-    title: (document.getElementById("modalTitle").value || "").trim(),
+    title: (document.getElementById("modalTitle")?.value || "").trim(),
   };
 
   try {
@@ -409,8 +602,14 @@ async function cancelBookingById(id){
   }
 }
 
+/* =========================
+   rendering day/week
+   ========================= */
+
 function renderScaleHeader(){
   const el = document.getElementById("scaleHeader");
+  if (!el) return;
+
   el.innerHTML = "";
   for (let h = 8; h <= 20; h++){
     const d = document.createElement("div");
@@ -426,25 +625,34 @@ function eqIcon(on, iconName, title){
 }
 
 async function renderDay(){
-  const dayDate = parseDMY(document.getElementById("dateInput").value);
+  const dayDate = parseDMY(document.getElementById("dateInput")?.value);
   if (!dayDate){ toast("Невірна дата"); return; }
+
   const range = dayRangeISO(dayDate);
   const occBody = document.getElementById("occBody");
+  if (!occBody) return;
+
   occBody.innerHTML = `<div class="grey-text" style="padding: 12px;">Завантаження...</div>`;
+
   try{
     await loadBookings(range.startISO, range.endISO);
+
     const byRoom = new Map();
     for (const bk of _bookings){
       if (!byRoom.has(bk.roomId)) byRoom.set(bk.roomId, []);
       byRoom.get(bk.roomId).push(bk);
     }
+
     const roomsFiltered = applyRoomFilters(_roomsCache);
     occBody.innerHTML = "";
+
     if (!roomsFiltered.length){
       occBody.innerHTML = `<div class="grey-text" style="padding: 12px;">Немає переговорних під фільтри.</div>`;
       return;
     }
+
     const durationMin = 60;
+
     for (const r of roomsFiltered){
       const row = document.createElement("div");
       row.className = "occ-row";
@@ -453,7 +661,13 @@ async function renderDay(){
       cRoom.innerHTML = `<div class="room-name">${escapeHtml(r.name)}</div><div class="room-meta">${r.capacity || 0} місць</div>`;
 
       const cEq = document.createElement("div");
-      cEq.innerHTML = `<div class="eq-icons">${eqIcon(!!r.has_projector, "cast", "Проектор")}${eqIcon(!!r.has_speakerphone, "mic", "Спікерфон")}${eqIcon(!!r.has_tv, "tv", "Телевізор")}${eqIcon(!!r.has_whiteboard, "border_color", "Маркерна дошка")}</div>`;
+      cEq.innerHTML =
+        `<div class="eq-icons">${
+          eqIcon(!!r.has_projector, "cast", "Проектор") +
+          eqIcon(!!r.has_speakerphone, "mic", "Спікерфон") +
+          eqIcon(!!r.has_tv, "tv", "Телевізор") +
+          eqIcon(!!r.has_whiteboard, "border_color", "Маркерна дошка")
+        }</div>`;
 
       const cScale = document.createElement("div");
       const bar = document.createElement("div");
@@ -468,6 +682,7 @@ async function renderDay(){
 
         const minute = WORK_START_MIN + Math.round((ratio * WORK_TOTAL_MIN) / 5) * 5;
         const startMin = clampToWork(minute);
+
         openBookingModal({ roomId: r.id, startMin, durationMin, dayDateOverride: dayDate });
       });
 
@@ -475,8 +690,10 @@ async function renderDay(){
       for (const bk of roomBookings){
         const st = new Date(bk.startMs);
         const en = new Date(bk.endMs);
+
         const stMin = st.getHours()*60 + st.getMinutes();
         const enMin = en.getHours()*60 + en.getMinutes();
+
         const leftPct = pct(stMin);
         const rightPct = pct(enMin);
         const widthPct = Math.max(0.5, rightPct - leftPct);
@@ -486,11 +703,13 @@ async function renderDay(){
         seg.style.left = `${leftPct}%`;
         seg.style.width = `${widthPct}%`;
         seg.title = `${bk.title ? bk.title : "Бронювання"} (${pad2(st.getHours())}:${pad2(st.getMinutes())}–${pad2(en.getHours())}:${pad2(en.getMinutes())})`;
+
         seg.addEventListener("click", (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
           showBookingDetails(bk);
         });
+
         bar.appendChild(seg);
       }
 
@@ -519,13 +738,17 @@ function buildWeekDays(weekStart){
 function renderDaysHeader(days){
   const el = document.getElementById("daysHeader");
   const elHours = document.getElementById("daysHours");
+  if (!el || !elHours) return;
+
   el.innerHTML = "";
   elHours.innerHTML = "";
+
   for (const item of days){
     const box = document.createElement("div");
     box.className = "day-head";
     box.innerHTML = `<div class="d-name">${item.label}</div><div class="d-date">${item.short}</div>`;
     el.appendChild(box);
+
     const h = document.createElement("div");
     h.className = "hours-cell";
     h.innerHTML = `<span>08:00</span><span>20:00</span>`;
@@ -543,7 +766,7 @@ function bookingsForRoomAndDay(roomId, dayDate){
 }
 
 async function renderWeek(){
-  const anchor = parseDMY(document.getElementById("dateInput").value);
+  const anchor = parseDMY(document.getElementById("dateInput")?.value);
   if (!anchor){ toast("Невірна дата"); return; }
 
   const weekStart = startOfWeekMonday(anchor);
@@ -552,10 +775,13 @@ async function renderWeek(){
   renderDaysHeader(days);
 
   const body = document.getElementById("wkBody");
+  if (!body) return;
+
   body.innerHTML = `<div class="grey-text" style="padding: 12px;">Завантаження...</div>`;
 
   try{
     await loadBookings(range.startISO, range.endISO);
+
     const roomsFiltered = applyRoomFilters(_roomsCache);
     body.innerHTML = "";
 
@@ -602,8 +828,10 @@ async function renderWeek(){
         for (const bk of bks){
           const st = new Date(bk.startMs);
           const en = new Date(bk.endMs);
+
           const stMin = st.getHours()*60 + st.getMinutes();
           const enMin = en.getHours()*60 + en.getMinutes();
+
           const leftPct = pct(stMin);
           const rightPct = pct(enMin);
           const widthPct = Math.max(0.5, rightPct - leftPct);
@@ -613,6 +841,7 @@ async function renderWeek(){
           seg.style.left = `${leftPct}%`;
           seg.style.width = `${widthPct}%`;
           seg.title = `${bk.title ? bk.title : "Бронювання"} (${pad2(st.getHours())}:${pad2(st.getMinutes())}–${pad2(en.getHours())}:${pad2(en.getMinutes())})`;
+
           seg.addEventListener("click", (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
@@ -636,9 +865,16 @@ async function renderWeek(){
   }
 }
 
+/* =========================
+   date label + mode
+   ========================= */
+
 function syncDateLabel(){
-  const d = parseDMY(document.getElementById("dateInput").value) || _curAnchor;
-  document.getElementById("dateLabel").textContent = (viewMode === "week")
+  const d = parseDMY(document.getElementById("dateInput")?.value) || _curAnchor;
+  const lbl = document.getElementById("dateLabel");
+  if (!lbl) return;
+
+  lbl.textContent = (viewMode === "week")
     ? formatWeekLabelUA(d)
     : formatDayLabelUA(d);
 }
@@ -647,20 +883,28 @@ function setMode(mode){
   viewMode = mode;
 
   const isDay = mode === "day";
-  document.getElementById("dayView").style.display = isDay ? "block" : "none";
-  document.getElementById("weekView").style.display = isDay ? "none" : "block";
+  const dayView = document.getElementById("dayView");
+  const weekView = document.getElementById("weekView");
+
+  if (dayView) dayView.style.display = isDay ? "block" : "none";
+  if (weekView) weekView.style.display = isDay ? "none" : "block";
 
   const btnDay = document.getElementById("btnDay");
   const btnWeek = document.getElementById("btnWeek");
 
-  btnDay.classList.toggle("is-active", isDay);
-  btnWeek.classList.toggle("is-active", !isDay);
+  if (btnDay){
+    btnDay.classList.toggle("is-active", isDay);
+    btnDay.setAttribute("aria-selected", isDay ? "true" : "false");
+  }
+  if (btnWeek){
+    btnWeek.classList.toggle("is-active", !isDay);
+    btnWeek.setAttribute("aria-selected", !isDay ? "true" : "false");
+  }
 
-  btnDay.setAttribute("aria-selected", isDay ? "true" : "false");
-  btnWeek.setAttribute("aria-selected", !isDay ? "true" : "false");
-
-  document.getElementById("pageTitle").textContent = isDay ? "Переговорні на день" : "Переговорні на тиждень";
-  document.getElementById("pageSubtitle").textContent = "";
+  const pageTitle = document.getElementById("pageTitle");
+  const pageSubtitle = document.getElementById("pageSubtitle");
+  if (pageTitle) pageTitle.textContent = isDay ? "Переговорні на день" : "Переговорні на тиждень";
+  if (pageSubtitle) pageSubtitle.textContent = "";
 
   syncDateLabel();
   loadAndRender();
@@ -678,6 +922,7 @@ const scheduleRender = debounce(() => loadAndRender(), 200);
 
 async function loadAndRender(){
   syncDateLabel();
+  renderActiveFiltersBar();
   if (viewMode === "week") return renderWeek();
   return renderDay();
 }
@@ -685,10 +930,34 @@ async function loadAndRender(){
 function setAnchorDate(d){
   _curAnchor = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0);
   const v = formatDMY(_curAnchor);
-  document.getElementById("dateInput").value = v;
+
+  const dateInput = document.getElementById("dateInput");
+  if (dateInput) dateInput.value = v;
+
   if (_fp) _fp.setDate(v, false, "d.m.Y");
   syncDateLabel();
 }
+
+/* modal date flatpickr init */
+function initModalDatePicker(){
+  const el = document.getElementById("modalDate");
+  if (!el) return;
+
+  _modalDateFp = flatpickr(el, {
+    locale: flatpickr.l10ns.uk,
+    dateFormat: "d.m.Y",
+    allowInput: true,
+    disableMobile: true,
+    monthSelectorType: "static",
+    onChange: (sel) => {
+      if (sel && sel[0]) setModalDate(sel[0]);
+    }
+  });
+}
+
+/* =========================
+   DOM ready
+   ========================= */
 
 document.addEventListener("DOMContentLoaded", async () => {
   const dateInput = document.getElementById("dateInput");
@@ -713,151 +982,235 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  // modal date picker (works only if you have #modalDate in HTML)
+  initModalDatePicker();
+
   setAnchorDate(new Date());
 
   const dateBtn = document.getElementById("dateBtn");
-  dateBtn.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  });
+  if (dateBtn){
+    dateBtn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
 
-  dateBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!_fp) return;
-    if (_fp.isOpen) {
-      _suppressOpen = true;
-      _fp.close();
-      try { document.activeElement && document.activeElement.blur && document.activeElement.blur(); } catch(err){}
-      setTimeout(() => { _suppressOpen = false; }, 0);
-    } else {
-      _fp.open();
-    }
-  });
+    dateBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!_fp) return;
 
-  document.getElementById("prevBtn").addEventListener("click", () => {
-    const step = (viewMode === "week") ? -7 : -1;
-    setAnchorDate(addDays(_curAnchor, step));
-    loadAndRender();
-  });
+      if (_fp.isOpen) {
+        _suppressOpen = true;
+        _fp.close();
+        try { document.activeElement?.blur?.(); } catch(err){}
+        setTimeout(() => { _suppressOpen = false; }, 0);
+      } else {
+        _fp.open();
+      }
+    });
+  }
 
-  document.getElementById("nextBtn").addEventListener("click", () => {
-    const step = (viewMode === "week") ? 7 : 1;
-    setAnchorDate(addDays(_curAnchor, step));
-    loadAndRender();
-  });
+  const prevBtn = document.getElementById("prevBtn");
+  if (prevBtn){
+    prevBtn.addEventListener("click", () => {
+      const step = (viewMode === "week") ? -7 : -1;
+      setAnchorDate(addDays(_curAnchor, step));
+      loadAndRender();
+    });
+  }
 
+  const nextBtn = document.getElementById("nextBtn");
+  if (nextBtn){
+    nextBtn.addEventListener("click", () => {
+      const step = (viewMode === "week") ? 7 : 1;
+      setAnchorDate(addDays(_curAnchor, step));
+      loadAndRender();
+    });
+  }
+
+  /* popover */
   const pop = document.getElementById("filterPop");
   const btn = document.getElementById("filterBtn");
   const closeBtn = document.getElementById("filterCloseBtn");
 
   function closePop(){
+    if (!pop) return;
     pop.classList.remove("open");
     pop.setAttribute("aria-hidden","true");
     setAdv(false);
   }
 
   function openPop(){
+    if (!pop) return;
     pop.classList.add("open");
     pop.setAttribute("aria-hidden","false");
   }
 
   function togglePop(){
+    if (!pop) return;
     if (pop.classList.contains("open")) closePop();
     else openPop();
   }
 
-  btn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    togglePop();
-  });
+  if (btn){
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      togglePop();
+    });
+  }
 
-  closeBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    closePop();
-  });
+  if (closeBtn){
+    closeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closePop();
+    });
+  }
 
   document.addEventListener("click", (e) => {
+    if (!pop || !btn) return;
     if (!pop.contains(e.target) && !btn.contains(e.target)) closePop();
   });
 
-  document.getElementById("advBtn").addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const advBody = document.getElementById("advBody");
-    setAdv(!advBody.classList.contains("open"));
-  });
-
-  document.getElementById("roomsClear").addEventListener("click", (e) => {
-    e.preventDefault();
-    document.querySelectorAll('input[name="roomFilter"]').forEach(x => x.checked = false);
-    const seats = document.getElementById("minSeats");
-    if (seats) seats.value = "";
-    ["eqProjector","eqMic","eqTv","eqBoard"].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.checked = false;
+  const advBtn = document.getElementById("advBtn");
+  if (advBtn){
+    advBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const advBody = document.getElementById("advBody");
+      setAdv(!advBody?.classList.contains("open"));
     });
-    scheduleRender();
-  });
+  }
 
-  document.getElementById("roomsList").addEventListener("change", (e) => {
-    const t = e.target;
-    if (t && t.matches('input[name="roomFilter"]')) scheduleRender();
-  });
+  /* filters: clear */
+  const roomsClear = document.getElementById("roomsClear");
+  if (roomsClear){
+    roomsClear.addEventListener("click", (e) => {
+      e.preventDefault();
+      clearAllFilters();
+      renderActiveFiltersBar();
+      scheduleRender();
+    });
+  }
 
-  document.getElementById("minSeats").addEventListener("input", scheduleRender);
+  /* filters: changes */
+  const roomsList = document.getElementById("roomsList");
+  if (roomsList){
+    roomsList.addEventListener("change", (e) => {
+      const t = e.target;
+      if (t && t.matches('input[name="roomFilter"]')){
+        renderActiveFiltersBar();
+        scheduleRender();
+      }
+    });
+  }
+
+  const minSeats = document.getElementById("minSeats");
+  if (minSeats){
+    minSeats.addEventListener("input", () => {
+      renderActiveFiltersBar();
+      scheduleRender();
+    });
+  }
+
   ["eqProjector","eqMic","eqTv","eqBoard"].forEach(id => {
-    document.getElementById(id).addEventListener("change", scheduleRender);
-  });
-
-  document.getElementById("applyFilters").addEventListener("click", (e) => {
-    e.preventDefault();
-    closePop();
-    loadAndRender();
-  });
-
-  document.getElementById("btnDay").addEventListener("click", () => setMode("day"));
-  document.getElementById("btnWeek").addEventListener("click", () => setMode("week"));
-
-  document.getElementById("openNewBookingBtn").addEventListener("click", () => {
-    const durationMin = 60;
-    if (!_roomsCache?.length){ toast("Немає переговорних"); return; }
-
-    if (viewMode === "week"){
-      const anchor = parseDMY(dateInput.value) || _curAnchor;
-      const ws = startOfWeekMonday(anchor);
-      _selectedDayForModal = addDays(ws, 0);
-    } else {
-      _selectedDayForModal = null;
-    }
-
-    const dayDate = (viewMode === "week") ? _selectedDayForModal : parseDMY(document.getElementById("dateInput").value);
-    const startMin = dayDate ? suggestStartMinForDay(dayDate, WORK_START_MIN) : WORK_START_MIN;
-
-    openBookingModal({
-      roomId: null,
-      startMin,
-      durationMin,
-      dayDateOverride: dayDate || null
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("change", () => {
+      renderActiveFiltersBar();
+      scheduleRender();
     });
   });
 
-  document.getElementById("createBookingBtn").addEventListener("click", createBookingFromModal);
-  document.getElementById("cancelBookingBtn").addEventListener("click", closeModal);
-  document.getElementById("closeXBtn").addEventListener("click", closeModal);
-  document.getElementById("bookingOverlay").addEventListener("click", closeModal);
+  const applyFilters = document.getElementById("applyFilters");
+  if (applyFilters){
+    applyFilters.addEventListener("click", (e) => {
+      e.preventDefault();
+      closePop();
+      renderActiveFiltersBar();
+      loadAndRender();
+    });
+  }
 
-  document.getElementById("closeViewBtn").addEventListener("click", closeViewModal);
-  document.getElementById("closeViewXBtn").addEventListener("click", closeViewModal);
-  document.getElementById("viewOverlay").addEventListener("click", closeViewModal);
-  document.getElementById("cancelEventBtn").addEventListener("click", (e) => {
+  /* active filter chips interactions */
+  const activeClear = document.getElementById("activeFiltersClear");
+  if (activeClear){
+    activeClear.addEventListener("click", () => {
+      clearAllFilters();
+      renderActiveFiltersBar();
+      loadAndRender();
+    });
+  }
+
+  const activeChips = document.getElementById("activeFiltersChips");
+  if (activeChips){
+    activeChips.addEventListener("click", (e) => {
+      const xBtn = e.target.closest("button.x");
+      if (!xBtn) return;
+      const chip = xBtn.closest(".af-chip");
+      if (!chip) return;
+      const key = chip.dataset.key;
+      clearFilterByKey(key);
+      renderActiveFiltersBar();
+      loadAndRender();
+    });
+  }
+
+  /* mode buttons */
+  const btnDay = document.getElementById("btnDay");
+  if (btnDay) btnDay.addEventListener("click", () => setMode("day"));
+
+  const btnWeek = document.getElementById("btnWeek");
+  if (btnWeek) btnWeek.addEventListener("click", () => setMode("week"));
+
+  /* open booking modal (top button) */
+  const openNew = document.getElementById("openNewBookingBtn");
+  if (openNew){
+    openNew.addEventListener("click", () => {
+      const durationMin = 60;
+      if (!_roomsCache?.length){ toast("Немає переговорних"); return; }
+
+      let dayDate = null;
+
+      if (viewMode === "week"){
+        const anchor = parseDMY(dateInput?.value) || _curAnchor;
+        const ws = startOfWeekMonday(anchor);
+        _selectedDayForModal = _selectedDayForModal || addDays(ws, 0); // Monday by default
+        dayDate = _selectedDayForModal;
+      } else {
+        dayDate = parseDMY(document.getElementById("dateInput")?.value) || _curAnchor;
+        _selectedDayForModal = null;
+      }
+
+      const startMin = dayDate ? suggestStartMinForDay(dayDate, WORK_START_MIN) : WORK_START_MIN;
+
+      openBookingModal({
+        roomId: null,
+        startMin,
+        durationMin,
+        dayDateOverride: dayDate
+      });
+    });
+  }
+
+  /* modal buttons */
+  document.getElementById("createBookingBtn")?.addEventListener("click", createBookingFromModal);
+  document.getElementById("cancelBookingBtn")?.addEventListener("click", closeModal);
+  document.getElementById("closeXBtn")?.addEventListener("click", closeModal);
+  document.getElementById("bookingOverlay")?.addEventListener("click", closeModal);
+
+  document.getElementById("closeViewBtn")?.addEventListener("click", closeViewModal);
+  document.getElementById("closeViewXBtn")?.addEventListener("click", closeViewModal);
+  document.getElementById("viewOverlay")?.addEventListener("click", closeViewModal);
+
+  document.getElementById("cancelEventBtn")?.addEventListener("click", (e) => {
     const id = e.currentTarget.dataset.bookingId;
     if (!id) return;
     cancelBookingById(id);
   });
 
+  /* time icon click */
   function openTimePicker(inputEl){
     if (!inputEl) return;
     if (typeof inputEl.showPicker === "function") {
@@ -876,17 +1229,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
+  /* esc */
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       if (_fp && _fp.isOpen) _fp.close();
       closePop();
-      if (modalEl().style.display === "block") closeModal();
-      if (viewModalEl().style.display === "block") closeViewModal();
+      if (modalEl()?.style.display === "block") closeModal();
+      if (viewModalEl()?.style.display === "block") closeViewModal();
     }
   });
 
   renderScaleHeader();
   await preloadRooms();
   setAdv(false);
+  renderActiveFiltersBar();
   setMode("day");
 });
