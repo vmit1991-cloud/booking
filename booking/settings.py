@@ -41,6 +41,11 @@ INSTALLED_APPS = [
     "core.apps.CoreConfig",
 ]
 
+
+# ========================
+# MIDDLEWARE
+# ========================
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -51,7 +56,18 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+
+# ========================
+# URLS / WSGI
+# ========================
+
 ROOT_URLCONF = "booking.urls"
+WSGI_APPLICATION = "booking.wsgi.application"
+
+
+# ========================
+# TEMPLATES
+# ========================
 
 TEMPLATES = [
     {
@@ -60,6 +76,7 @@ TEMPLATES = [
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
+                "django.template.context_processors.debug",
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
@@ -67,8 +84,6 @@ TEMPLATES = [
         },
     },
 ]
-
-WSGI_APPLICATION = "booking.wsgi.application"
 
 
 # ========================
@@ -101,6 +116,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "uk"
 TIME_ZONE = "Europe/Kyiv"
+
 USE_I18N = True
 USE_TZ = True
 
@@ -108,23 +124,37 @@ DATE_FORMAT = "d.m.Y"
 DATETIME_FORMAT = "d.m.Y H:i"
 TIME_FORMAT = "H:i"
 
-
-# ========================
-# STATIC FILES
-# ========================
-
-STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
-
 LOCALE_PATHS = [
     BASE_DIR / "locale",
 ]
 
 
 # ========================
-# AUTH REDIRECTS (ВАЖЛИВО)
+# STATIC FILES
+# ========================
+
+STATIC_URL = "/static/"
+
+# ДЕВ: звідси Django буде віддавати /static/* (твоя папка booking_new/static/...)
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
+
+# ПРОД (Render): сюди collectstatic складе все
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+
+# ========================
+# AUTH REDIRECTS
 # ========================
 
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/calendar/"
 LOGOUT_REDIRECT_URL = "/login/"
+
+
+# ========================
+# DEFAULTS
+# ========================
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

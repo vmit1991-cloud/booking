@@ -16,10 +16,6 @@ class CreateUserResult:
     ok: bool
     error: str | None = None
 
-
-# ---------------------------
-# users
-# ---------------------------
 def _password_error(p1: str, p2: str) -> str | None:
     if p1 != p2:
         return "Паролі не співпадають."
@@ -71,10 +67,6 @@ def create_user_by_admin(
 
     return CreateUserResult(True)
 
-
-# ---------------------------
-# rooms
-# ---------------------------
 def _parse_int(value, default: int = 0) -> int:
     try:
         return int((value or "").strip())
@@ -86,7 +78,6 @@ def update_meeting_room_from_post(room: MeetingRoom, post) -> None:
     room.name = (post.get("name") or "").strip()
     room.capacity = _parse_int(post.get("capacity"), default=0)
 
-    # чекбокси просто: є ключ -> True
     room.has_projector = "has_projector" in post
     room.has_speakerphone = "has_speakerphone" in post
     room.has_tv = "has_tv" in post

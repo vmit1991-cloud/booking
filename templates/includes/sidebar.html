@@ -1,35 +1,50 @@
-<aside class="sidebar">
-  <div class="menu-title">Меню</div>
-
-  <a class="menu-item" href="/calendar/">
-    <i class="material-icons">event</i>
-    <span>Бронювання переговорної</span>
-  </a>
-
-  {% if "/calendar" in request.path %}
-    <div id="roomsSidebar" class="rooms-submenu">
-      <div class="grey-text" style="padding: 6px 0 6px 48px;">
-        Завантаження...
-      </div>
+<aside class="sidebar" data-url="{{ request.path }}">
+  <div class="sidebar__section">
+    <div class="sidebar__title">Меню</div>
+    <a class="navitem" data-match="calendar" href="{% url 'calendar' %}">
+      <i class="material-icons">event</i>
+      <span>Зайнятість переговорних</span>
+    </a>
+  </div>
+  {% if user.is_staff %}
+    <div class="sidebar__section">
+      <div class="sidebar__title">Адміністрування</div>
+      <a class="navitem" data-match="admin_rooms" href="{% url 'admin_rooms' %}">
+        <i class="material-icons">meeting_room</i>
+        <span>Переговорні</span>
+      </a>
+      <a class="navitem" data-match="admin_users" href="{% url 'admin_users' %}">
+        <i class="material-icons">people</i>
+        <span>Користувачі</span>
+      </a>
     </div>
   {% endif %}
-
-  {% if user.is_staff %}
-    <div class="divider" style="margin:12px 0;"></div>
-    <div class="menu-title">Адмін</div>
-
-    <a class="menu-item" href="/admin/rooms/">
-      <i class="material-icons">meeting_room</i>
-      <span>Переговорні</span>
-    </a>
-
-    <a class="menu-item" href="/admin/bookings/pending/">
-      <i class="material-icons">playlist_add_check</i>
-      <span>Заявки</span>
-    </a><a class="menu-item" href="{% url 'admin_users' %}">
-      <i class="material-icons">people</i>
-      <span>Користувачі</span>
-    </a>
-
-  {% endif %}
 </aside>
+<script>
+  (function () {
+    const sidebar = document.querySelector(".sidebar");
+    if (!sidebar) return;
+
+    const path = sidebar.getAttribute("data-url") || "";
+
+    const setActive = (match) => {
+      const el = sidebar.querySelector(`.navitem[data-match="${match}"]`);
+      if (el) el.classList.add("active");
+    };
+
+    if (path.startsWith("/calendar/")) {
+      setActive("calendar");
+      return;
+    }
+
+    if (path.startsWith("/admin/rooms/")) {
+      setActive("admin_rooms");
+      return;
+    }
+
+    if (path.startsWith("/admin/users/")) {
+      setActive("admin_users");
+      return;
+    }
+  })();
+</script>

@@ -1,9 +1,8 @@
 import json
 from datetime import time
+from typing import Any
 
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -12,51 +11,34 @@ from django.views.decorators.http import require_http_methods
 
 from .models import Booking, MeetingRoom
 
-
-# ===========================
-# WORKING HOURS CONFIG
-# ===========================
-WORK_DAYS = {0, 1, 2, 3, 4}  # Mon-Fri
-WORK_START = time(8, 0)     # 08:00
-WORK_END = time(20, 0)      # 20:00 (end may be exactly 20:00)
+WORK_DAYS = {0, 1, 2, 3, 4}
+WORK_START = time(8, 0)
+WORK_END = time(20, 0)
 
 
-# ===========================
-# HELPERS
-# ===========================
-def _json_ok(extra=None):
-    data = {"ok": True}
+def _json_ok(extra: dict[str, Any] | None = None) -> JsonResponse:
+    data: dict[str, Any] = {"ok": True}
     if extra:
         data.update(extra)
     return JsonResponse(data)
 
 
-def _json_error(message, *, status=400):
+def _json_error(message: str, *, status: int = 400) -> JsonResponse:
     return JsonResponse({"ok": False, "error": message}, status=status)
 
 
-def _parse_int(value, default=None):
+def _parse_int(value: Any, default: int | None = None) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
         return default
 
 
-def _parse_body_json(request):
+def _parse_body_json(request) -> dict[str, Any] | None:
     try:
         return json.loads(request.body.decode("utf-8"))
     except Exception:
         return None
-
-
-def _booking_color(status: str) -> str:
-    if status == Booking.Status.APPROVED:
-        return "#2e7d32"
-    if status == Booking.Status.PENDING:
-        return "#6c757d"
-    if status == Booking.Status.CANCELLED:
-        return "#f57c00"
-    return "#b71c1c"
 
 
 def _ensure_aware(dt):
@@ -68,7 +50,6 @@ def _ensure_aware(dt):
 
 
 def _to_local(dt):
-    """Convert datetime to local timezone from settings (Europe/Kyiv)."""
     dt = _ensure_aware(dt)
     if dt is None:
         return None
@@ -76,48 +57,46 @@ def _to_local(dt):
 
 
 def _is_within_working_hours(start, end) -> bool:
-    """
-    Booking must be:
-      - same day
-      - Mon-Fri
-      - within 08:00..20:00 (end may be exactly 20:00)
-    All checks are in LOCAL timezone.
-    """
     if not start or not end:
         return False
-
     start_local = _to_local(start)
     end_local = _to_local(end)
-
     if not start_local or not end_local:
         return False
-
     if end_local <= start_local:
         return False
-
-    # Must be same local date
     if start_local.date() != end_local.date():
         return False
-
-    # Workdays only
     if start_local.weekday() not in WORK_DAYS:
         return False
-
     st = start_local.time()
     en = end_local.time()
-
     if st < WORK_START:
         return False
     if en > WORK_END:
         return False
-
     return True
 
 
-def _has_overlap_active(*, room_id, start, end, exclude_id=None) -> bool:
+def _status_if_exists(name: str) -> str | None:
+    return getattr(Booking.Status, name, None)
+
+
+def _excluded_statuses_for_overlap() -> list[str]:
+    excluded: list[str] = []
+    s = _status_if_exists("REJECTED")
+    if s:
+        excluded.append(s)
+    s = _status_if_exists("CANCELLED")
+    if s:
+        excluded.append(s)
+    return excluded
+
+
+def _has_overlap_active(*, room_id: int, start, end, exclude_id: int | None = None) -> bool:
     qs = (
         Booking.objects.filter(room_id=room_id)
-        .exclude(status__in=[Booking.Status.REJECTED, Booking.Status.CANCELLED])
+        .exclude(status__in=_excluded_statuses_for_overlap())
         .filter(start__lt=end, end__gt=start)
     )
     if exclude_id is not None:
@@ -129,26 +108,61 @@ def _get_room_ids_from_query(request) -> list[int]:
     rooms_raw = (request.GET.get("rooms") or "").strip()
     if not rooms_raw:
         return []
-
-    room_ids = []
+    out: list[int] = []
     for x in rooms_raw.split(","):
         x = x.strip()
         if x.isdigit():
-            room_ids.append(int(x))
-    return room_ids
+            out.append(int(x))
+    return out
 
 
-# ===========================
-# API
-# ===========================
+def _booking_color(status: str) -> str:
+    # залишаємо кольори як були, але без "approve flow"
+    if status == Booking.Status.APPROVED:
+        return "#2e7d32"
+    cancelled = _status_if_exists("CANCELLED")
+    if cancelled and status == cancelled:
+        return "#f57c00"
+    rejected = _status_if_exists("REJECTED")
+    if rejected and status == rejected:
+        return "#b71c1c"
+    pending = _status_if_exists("PENDING")
+    if pending and status == pending:
+        return "#6c757d"
+    return "#6c757d"
+
+
+def _event_title(b: Booking) -> str:
+    # прибрали "(Підтверджено)" і будь-які статуси з title
+    custom_title = (getattr(b, "title", "") or "").strip()
+    if custom_title:
+        return custom_title
+    return b.room.name
+
+
+def _room_payload(r: MeetingRoom) -> dict[str, Any]:
+    return {
+        "id": r.id,
+        "name": r.name,
+        "capacity": r.capacity,
+        "has_projector": getattr(r, "has_projector", False),
+        "has_speakerphone": getattr(r, "has_speakerphone", False),
+        "has_tv": getattr(r, "has_tv", False),
+        "has_whiteboard": getattr(r, "has_whiteboard", False),
+    }
+
+
+def _can_cancel_booking(b: Booking, user) -> bool:
+    if not user or not user.is_authenticated:
+        return False
+    return (b.user_id == user.id) or bool(getattr(user, "is_staff", False))
+
+
 @login_required
 @require_http_methods(["GET"])
 def api_rooms(request):
     rooms = MeetingRoom.objects.all().order_by("name")
-    return JsonResponse(
-        [{"id": r.id, "name": r.name, "capacity": r.capacity} for r in rooms],
-        safe=False,
-    )
+    return JsonResponse([_room_payload(r) for r in rooms], safe=False)
 
 
 @login_required
@@ -170,37 +184,33 @@ def api_bookings(request):
         if room_ids:
             qs = qs.filter(room_id__in=room_ids)
 
-        if not request.user.is_staff:
-            qs = qs.filter(Q(status=Booking.Status.APPROVED) | Q(user=request.user))
-
-        events = []
+        events: list[dict[str, Any]] = []
         for b in qs:
-            title = f"{b.room.name} ({b.get_status_display()})"
-            if getattr(b, "title", ""):
-                title = b.title
-
+            can_cancel = _can_cancel_booking(b, request.user)
             events.append(
                 {
                     "id": b.id,
-                    "title": title,
+                    "title": _event_title(b),
                     "start": b.start.isoformat(),
                     "end": b.end.isoformat(),
                     "allDay": False,
                     "color": _booking_color(b.status),
+                    "canCancel": can_cancel,
+                    "bookedBy": b.user.username,
                     "extendedProps": {
+                        "id": b.id,
                         "roomId": b.room_id,
                         "roomName": b.room.name,
-                        "status": b.status,
-                        "statusLabel": b.get_status_display(),
                         "isMine": b.user_id == request.user.id,
                         "bookedBy": b.user.username,
+                        "canCancel": can_cancel,
+                        "status": b.status,
+                        "statusLabel": b.get_status_display(),
                     },
                 }
             )
-
         return JsonResponse(events, safe=False)
 
-    # POST: create booking
     payload = _parse_body_json(request)
     if payload is None:
         return _json_error("Bad JSON", status=400)
@@ -209,11 +219,20 @@ def api_bookings(request):
     if room_id is None:
         room_id = _parse_int(payload.get("roomId"), default=None)
 
-    start = _ensure_aware(parse_datetime(payload.get("start")))
-    end = _ensure_aware(parse_datetime(payload.get("end")))
+    start_raw = payload.get("start")
+    end_raw = payload.get("end")
+    start = _ensure_aware(parse_datetime(str(start_raw or "")))
+    end = _ensure_aware(parse_datetime(str(end_raw or "")))
 
     if room_id is None or not start or not end:
         return _json_error("Missing/invalid fields", status=400)
+
+    now = timezone.now()
+    if start < now:
+        return _json_error("Не можна створювати бронювання в минулому.", status=400)
+
+    if end <= start:
+        return _json_error("Кінець має бути пізніше за початок.", status=400)
 
     room = MeetingRoom.objects.filter(id=room_id).first()
     if not room:
@@ -233,7 +252,7 @@ def api_bookings(request):
         user=request.user,
         start=start,
         end=end,
-        status=Booking.Status.PENDING,
+        status=Booking.Status.APPROVED,
     )
 
     if hasattr(booking, "title"):
@@ -254,64 +273,7 @@ def api_bookings(request):
 @require_http_methods(["POST"])
 def api_booking_cancel(request, booking_id):
     booking = get_object_or_404(Booking, id=booking_id)
-
-    if booking.user_id != request.user.id and not request.user.is_staff:
+    if not _can_cancel_booking(booking, request.user):
         return HttpResponseForbidden("Недостатньо прав")
-
-    if booking.status not in [Booking.Status.CANCELLED, Booking.Status.REJECTED]:
-        booking.status = Booking.Status.CANCELLED
-        booking.save(update_fields=["status"])
-
-    return _json_ok()
-
-
-@staff_member_required
-@require_http_methods(["POST"])
-def api_booking_approve(request, booking_id):
-    booking = get_object_or_404(Booking, id=booking_id)
-
-    if booking.status != Booking.Status.PENDING:
-        return _json_error("Not pending", status=400)
-
-    if not _is_within_working_hours(booking.start, booking.end):
-        return _json_error(
-            "Не можна підтвердити бронювання поза робочим часом (Пн–Пт, 08:00–20:00).",
-            status=400,
-        )
-
-    if _has_overlap_active(
-        room_id=booking.room_id,
-        start=booking.start,
-        end=booking.end,
-        exclude_id=booking.id,
-    ):
-        return _json_error("Цей час уже зайнятий для вибраної переговорної.", status=400)
-
-    booking.status = Booking.Status.APPROVED
-
-    if hasattr(booking, "approved_by_id"):
-        booking.approved_by = request.user
-    if hasattr(booking, "approved_at"):
-        booking.approved_at = timezone.now()
-
-    booking.save()
-    return _json_ok()
-
-
-@staff_member_required
-@require_http_methods(["POST"])
-def api_booking_reject(request, booking_id):
-    booking = get_object_or_404(Booking, id=booking_id)
-
-    if booking.status != Booking.Status.PENDING:
-        return _json_error("Not pending", status=400)
-
-    booking.status = Booking.Status.REJECTED
-
-    if hasattr(booking, "approved_by_id"):
-        booking.approved_by = request.user
-    if hasattr(booking, "approved_at"):
-        booking.approved_at = timezone.now()
-
-    booking.save()
+    booking.delete()
     return _json_ok()

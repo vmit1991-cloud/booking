@@ -3,10 +3,6 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 
-
-# ---------------------------
-# meeting rooms
-# ---------------------------
 class MeetingRoom(models.Model):
     name = models.CharField("Назва", max_length=120, unique=True)
     capacity = models.PositiveIntegerField("Кількість місць")
@@ -27,9 +23,6 @@ class MeetingRoom(models.Model):
         return f"{self.name} ({self.capacity} місць)"
 
 
-# ---------------------------
-# bookings
-# ---------------------------
 class Booking(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING", "Очікує підтвердження"
@@ -63,12 +56,9 @@ class Booking(models.Model):
         ordering = ["-start"]
 
     def clean(self):
-        # базова перевірка дат
         if self.end <= self.start:
             raise ValidationError("Кінець має бути після початку.")
 
-        # беремо бронювання цієї ж кімнати
-        # і не враховуємо відхилені та скасовані
         active_statuses = [self.Status.PENDING, self.Status.APPROVED]
 
         qs = Booking.objects.filter(
@@ -76,12 +66,9 @@ class Booking(models.Model):
             status__in=active_statuses,
         )
 
-        # якщо редагування — виключаємо сам запис
         if self.pk:
             qs = qs.exclude(pk=self.pk)
 
-        # перевірка перетину по часу
-        # start < існуючий end  AND  end > існуючий start
         has_overlap = qs.filter(
             Q(start__lt=self.end) & Q(end__gt=self.start)
         ).exists()

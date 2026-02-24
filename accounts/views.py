@@ -1,72 +1,45 @@
+from __future__ import annotations
+
+from typing import Any
+
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db.models import Q
-from django.http import HttpResponseForbidden
+from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
-from .models import Booking, MeetingRoom
+from .models import MeetingRoom
 
 User = get_user_model()
 
 MIN_PASSWORD_LEN = 6
 
 
-# ---------------------------
-# public
-# ---------------------------
-def home(request):
-    return redirect("calendar")
+def _str(post: dict[str, Any], name: str) -> str:
+    return (post.get(name) or "").strip()
 
 
-@ensure_csrf_cookie
-@login_required
-def calendar_view(request):
-    return render(request, "calendar/index.html")
-
-
-@require_http_methods(["GET", "POST"])
-def login_view(request):
-    if request.user.is_authenticated:
-        return redirect("calendar")
-
-    error = None
-
-    if request.method == "POST":
-        username = (request.POST.get("username") or "").strip()
-        password = request.POST.get("password") or ""
-
-        user = authenticate(request, username=username, password=password)
-        if user is not None:
-            login(request, user)
-            return redirect("calendar")
-
-        error = "Невірний логін або пароль"
-
-    return render(request, "accounts/login.html", {"error": error})
-
-
-@login_required
-@require_http_methods(["POST"])
-def logout_view(request):
-    # вихід має бути тільки POST
-    logout(request)
-    return redirect("login")
-
-
-# ---------------------------
-# helpers
-# ---------------------------
-def _bool_from_post(post, name: str) -> bool:
+def _bool_from_post(post: dict[str, Any], name: str) -> bool:
     return name in post
 
 
-def _room_flags_from_post(post) -> dict:
-    # чекбокси -> boolean поля
+def _parse_capacity(value: Any) -> int:
+    s = (value or "").strip()
+    try:
+        n = int(s)
+    except (TypeError, ValueError):
+        return 0
+    return n
+
+
+def _room_flags_from_post(post: dict[str, Any]) -> dict[str, bool]:
     return {
         "has_projector": _bool_from_post(post, "has_projector"),
         "has_speakerphone": _bool_from_post(post, "has_speakerphone"),
@@ -75,73 +48,148 @@ def _room_flags_from_post(post) -> dict:
     }
 
 
-def _parse_capacity(value) -> int:
-    value = (value or "").strip()
+def _password_error(password1: str, password2: str) -> str | None:
+    if password1 != password2:
+        return "Паролі не співпадають."
+    if len(password1) < MIN_PASSWORD_LEN:
+        return f"Пароль має бути мінімум {MIN_PASSWORD_LEN} символів."
+
     try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
+        validate_password(password1)
+    except ValidationError as e:
+        return " ".join(e.messages)
+
+    return None
 
 
-# ---------------------------
-# admin: rooms
-# ---------------------------
+def _safe_next_url(request: HttpRequest, default_url_name: str) -> str:
+    nxt = (request.GET.get("next") or "").strip()
+    if nxt and url_has_allowed_host_and_scheme(
+        url=nxt,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return nxt
+    return reverse(default_url_name)
+
+
+def _room_form_error(name: str, capacity: int) -> str | None:
+    if not name:
+        return "Назва переговорної обовʼязкова."
+    if capacity <= 0:
+        return "Місткість має бути більше 0."
+    if MeetingRoom.objects.filter(name__iexact=name).exists():
+        return "Переговорна з такою назвою вже існує."
+    return None
+
+
+def home(request: HttpRequest) -> HttpResponse:
+    return redirect("calendar")
+
+
+@ensure_csrf_cookie
+@login_required
+def calendar_view(request: HttpRequest) -> HttpResponse:
+    return render(request, "calendar/index.html")
+
+
+@require_http_methods(["GET", "POST"])
+def login_view(request: HttpRequest) -> HttpResponse:
+    if request.user.is_authenticated:
+        return redirect("calendar")
+
+    error: str | None = None
+
+    if request.method == "POST":
+        username = _str(request.POST, "username")
+        password = request.POST.get("password") or ""
+
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect(_safe_next_url(request, "calendar"))
+
+        error = "Невірний логін або пароль"
+
+    next_url = request.GET.get("next") or ""
+    return render(request, "accounts/login.html", {"error": error, "next": next_url})
+
+
+@login_required
+@require_http_methods(["POST"])
+def logout_view(request: HttpRequest) -> HttpResponse:
+    logout(request)
+    return redirect("login")
+
+
 @staff_member_required
 @require_http_methods(["GET", "POST"])
-def admin_rooms(request):
+def admin_rooms(request: HttpRequest) -> HttpResponse:
+    error: str | None = None
+
     if request.method == "POST":
-        name = (request.POST.get("name") or "").strip()
+        name = _str(request.POST, "name")
         capacity = _parse_capacity(request.POST.get("capacity"))
 
-      
-        MeetingRoom.objects.create(
-            name=name,
-            capacity=capacity,
-            **_room_flags_from_post(request.POST),
-        )
-        return redirect("admin_rooms")
+        error = _room_form_error(name, capacity)
+        if not error:
+            MeetingRoom.objects.create(
+                name=name,
+                capacity=capacity,
+                **_room_flags_from_post(request.POST),
+            )
+            return redirect("admin_rooms")
 
     rooms = MeetingRoom.objects.all().order_by("name")
-    return render(request, "admin/rooms.html", {"rooms": rooms})
+    return render(request, "admin/rooms.html", {"rooms": rooms, "error": error})
 
 
 @staff_member_required
 @require_http_methods(["GET", "POST"])
-def admin_room_edit(request, room_id):
+def admin_room_edit(request: HttpRequest, room_id: int) -> HttpResponse:
     room = get_object_or_404(MeetingRoom, id=room_id)
+    error: str | None = None
 
     if request.method == "POST":
-        room.name = (request.POST.get("name") or "").strip()
-        room.capacity = _parse_capacity(request.POST.get("capacity"))
+        name = _str(request.POST, "name")
+        capacity = _parse_capacity(request.POST.get("capacity"))
 
-        flags = _room_flags_from_post(request.POST)
-        room.has_projector = flags["has_projector"]
-        room.has_speakerphone = flags["has_speakerphone"]
-        room.has_tv = flags["has_tv"]
-        room.has_whiteboard = flags["has_whiteboard"]
+        if not name:
+            error = "Назва переговорної обовʼязкова."
+        elif capacity <= 0:
+            error = "Місткість має бути більше 0."
+        elif MeetingRoom.objects.filter(name__iexact=name).exclude(id=room.id).exists():
+            error = "Переговорна з такою назвою вже існує."
 
-        room.save()
-        return redirect("admin_rooms")
+        if not error:
+            room.name = name
+            room.capacity = capacity
 
-    return render(request, "admin/room_edit.html", {"room": room})
+            flags = _room_flags_from_post(request.POST)
+            room.has_projector = flags["has_projector"]
+            room.has_speakerphone = flags["has_speakerphone"]
+            room.has_tv = flags["has_tv"]
+            room.has_whiteboard = flags["has_whiteboard"]
+
+            room.save()
+            return redirect("admin_rooms")
+
+    return render(request, "admin/room_edit.html", {"room": room, "error": error})
 
 
 @staff_member_required
 @require_http_methods(["POST"])
-def admin_room_delete(request, room_id):
+def admin_room_delete(request: HttpRequest, room_id: int) -> HttpResponse:
     room = get_object_or_404(MeetingRoom, id=room_id)
     room.delete()
     return redirect("admin_rooms")
 
 
-# ---------------------------
-# admin: users
-# ---------------------------
 @staff_member_required
 @require_http_methods(["GET"])
-def admin_users(request):
+def admin_users(request: HttpRequest) -> HttpResponse:
     q = (request.GET.get("q") or "").strip()
-    active = request.GET.get("active")  # "1" / "0" / None
+    active = request.GET.get("active")
 
     users = User.objects.all().order_by("username")
 
@@ -156,34 +204,23 @@ def admin_users(request):
     if active in ("0", "1"):
         users = users.filter(is_active=(active == "1"))
 
-    return render(request, "admin/users.html", {"users": users, "q": q, "active": active})
-
-
-def _password_error(password1: str, password2: str) -> str | None:
-    if password1 != password2:
-        return "Паролі не співпадають."
-    if len(password1) < MIN_PASSWORD_LEN:
-        return f"Пароль має бути мінімум {MIN_PASSWORD_LEN} символів."
-
-    try:
-        validate_password(password1)
-    except ValidationError as e:
-        # Django повертає список повідомлень
-        return " ".join(e.messages)
-
-    return None
+    return render(
+        request,
+        "admin/users.html",
+        {"users": users, "q": q, "active": active},
+    )
 
 
 @staff_member_required
 @require_http_methods(["GET", "POST"])
-def admin_create_user(request):
-    error = None
+def admin_create_user(request: HttpRequest) -> HttpResponse:
+    error: str | None = None
 
     if request.method == "POST":
-        username = (request.POST.get("username") or "").strip()
-        email = (request.POST.get("email") or "").strip()
-        first_name = (request.POST.get("first_name") or "").strip()
-        last_name = (request.POST.get("last_name") or "").strip()
+        username = _str(request.POST, "username")
+        email = _str(request.POST, "email")
+        first_name = _str(request.POST, "first_name")
+        last_name = _str(request.POST, "last_name")
 
         password1 = request.POST.get("password1") or ""
         password2 = request.POST.get("password2") or ""
@@ -218,50 +255,49 @@ def admin_create_user(request):
 
 @staff_member_required
 @require_http_methods(["GET", "POST"])
-def admin_user_detail(request, user_id):
-    user = get_object_or_404(User, id=user_id)
+def admin_user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
+    u = get_object_or_404(User, id=user_id)
 
-    error = None
+    error: str | None = None
     saved = False
 
     if request.method == "POST":
-        user.email = (request.POST.get("email") or "").strip()
-        user.first_name = (request.POST.get("first_name") or "").strip()
-        user.last_name = (request.POST.get("last_name") or "").strip()
+        u.email = _str(request.POST, "email")
+        u.first_name = _str(request.POST, "first_name")
+        u.last_name = _str(request.POST, "last_name")
 
-        # щоб адмін випадково не забрав у себе staff-доступ
-        if user.id == request.user.id and not _bool_from_post(request.POST, "is_staff"):
+        requested_staff = _bool_from_post(request.POST, "is_staff")
+        if u.id == request.user.id and not requested_staff:
             error = "Не можна прибрати собі staff-доступ."
         else:
-            user.is_staff = _bool_from_post(request.POST, "is_staff")
+            u.is_staff = requested_staff
 
         if not error:
-            user.save(update_fields=["email", "first_name", "last_name", "is_staff"])
+            u.save(update_fields=["email", "first_name", "last_name", "is_staff"])
             saved = True
 
-    return render(request, "admin/user_detail.html", {"u": user, "error": error, "saved": saved})
+    return render(request, "admin/user_detail.html", {"u": u, "error": error, "saved": saved})
 
 
 @staff_member_required
 @require_http_methods(["POST"])
-def admin_user_toggle_active(request, user_id):
-    user = get_object_or_404(User, id=user_id)
+def admin_user_toggle_active(request: HttpRequest, user_id: int) -> HttpResponse:
+    u = get_object_or_404(User, id=user_id)
 
-    if user.id == request.user.id:
+    if u.id == request.user.id:
         return HttpResponseForbidden("Не можна деактивувати самого себе.")
 
-    user.is_active = not user.is_active
-    user.save(update_fields=["is_active"])
+    u.is_active = not u.is_active
+    u.save(update_fields=["is_active"])
 
-    return redirect("admin_user_detail", user_id=user.id)
+    return redirect("admin_user_detail", user_id=u.id)
 
 
 @staff_member_required
 @require_http_methods(["GET", "POST"])
-def admin_user_set_password(request, user_id):
-    user = get_object_or_404(User, id=user_id)
-
-    error = None
+def admin_user_set_password(request: HttpRequest, user_id: int) -> HttpResponse:
+    u = get_object_or_404(User, id=user_id)
+    error: str | None = None
 
     if request.method == "POST":
         p1 = request.POST.get("password1") or ""
@@ -269,22 +305,8 @@ def admin_user_set_password(request, user_id):
 
         error = _password_error(p1, p2)
         if not error:
-            user.set_password(p1)
-            user.save()
-            return redirect("admin_user_detail", user_id=user.id)
+            u.set_password(p1)
+            u.save()
+            return redirect("admin_user_detail", user_id=u.id)
 
-    return render(request, "admin/user_set_password.html", {"u": user, "error": error})
-
-
-# ---------------------------
-# admin: pending bookings
-# ---------------------------
-@staff_member_required
-@require_http_methods(["GET"])
-def admin_pending_bookings(request):
-    pending = (
-        Booking.objects.select_related("room", "user")
-        .filter(status=Booking.Status.PENDING)
-        .order_by("start")
-    )
-    return render(request, "admin/pending_bookings.html", {"pending": pending})
+    return render(request, "admin/user_set_password.html", {"u": u, "error": error})

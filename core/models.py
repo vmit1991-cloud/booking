@@ -17,13 +17,6 @@ class Room(models.Model):
 
 
 class Booking(models.Model):
-    """
-    Бронювання кімнати.
-
-    Робочий час: 08:00–20:00
-    Перетини заборонені для активних бронювань (PENDING + APPROVED)
-    """
-
     class Status(models.TextChoices):
         PENDING = "PENDING", "Очікує"
         APPROVED = "APPROVED", "Підтверджено"
@@ -63,15 +56,12 @@ class Booking(models.Model):
         ordering = ["-start"]
 
     def clean(self):
-        # базове
         if self.end <= self.start:
             raise ValidationError("Кінець має бути після початку.")
 
-        # не даємо тягнути бронювання на інший день (спрощує життя і календар)
         if self.start.date() != self.end.date():
             raise ValidationError("Бронювання має бути в межах одного дня.")
 
-        # робочий час
         s = self.start.astimezone().time()
         e = self.end.astimezone().time()
 
@@ -80,7 +70,6 @@ class Booking(models.Model):
         if not (self.WORK_START < e <= self.WORK_END):
             raise ValidationError("Кінець має бути в робочий час (08:00–20:00).")
 
-        # перетин: перевіряємо тільки активні бронювання
         qs = Booking.objects.filter(room=self.room).filter(
             Q(status=Booking.Status.PENDING) | Q(status=Booking.Status.APPROVED)
         )

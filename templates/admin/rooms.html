@@ -1,42 +1,28 @@
 {% extends "base.html" %}
-
 {% block title %}Переговорні{% endblock %}
-
 {% block content %}
 <div class="row" style="margin-top: 4px;">
-
-  <!-- Заголовок -->
   <div class="col s12">
     <div class="card">
       <div class="card-content" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
         <span class="card-title" style="margin:0;">Переговорні кімнати</span>
-
-        <span class="grey-text" style="font-size:13px;">
-          Тут можна додати/редагувати переговорки і їх обладнання.
-        </span>
       </div>
     </div>
   </div>
-
-  <!-- ЛІВО: додавання -->
   <div class="col s12 m5">
     <div class="card">
       <div class="card-content">
         <span class="card-title">Додати переговорну</span>
-
         <form method="post" autocomplete="off">
           {% csrf_token %}
-
           <div class="input-field">
             <input id="name" name="name" type="text" required>
             <label for="name">Назва</label>
           </div>
-
           <div class="input-field">
             <input id="capacity" name="capacity" type="number" min="1" required>
             <label for="capacity">Кількість місць</label>
           </div>
-
           <div style="margin-top:8px;">
             <p style="margin:6px 0;">
               <label><input type="checkbox" name="has_projector"><span>Проектор</span></label>
@@ -51,27 +37,19 @@
               <label><input type="checkbox" name="has_whiteboard"><span>Маркерна дошка</span></label>
             </p>
           </div>
-
           <div style="margin-top:16px; display:flex; gap:10px; align-items:center;">
             <button class="btn waves-effect waves-light" type="submit">
               Додати <i class="material-icons right">add</i>
             </button>
-
-            <span class="grey-text" style="font-size:12px;">
-              Після додавання зʼявиться справа в списку.
-            </span>
           </div>
         </form>
       </div>
     </div>
   </div>
-
-  <!-- ПРАВО: список -->
   <div class="col s12 m7">
     <div class="card">
       <div class="card-content">
         <span class="card-title">Список</span>
-
         <table class="striped responsive-table">
           <thead>
             <tr>
@@ -81,7 +59,6 @@
               <th class="right-align">Дії</th>
             </tr>
           </thead>
-
           <tbody>
             {% for r in rooms %}
               <tr>
@@ -90,12 +67,10 @@
                 <td class="grey-text text-darken-2">
                   {% with items="" %}
                   {% endwith %}
-
                   {% if r.has_projector %}Проектор{% endif %}
                   {% if r.has_speakerphone %}{% if r.has_projector %}, {% endif %}Спікерфон{% endif %}
                   {% if r.has_tv %}{% if r.has_projector or r.has_speakerphone %}, {% endif %}ТВ{% endif %}
                   {% if r.has_whiteboard %}{% if r.has_projector or r.has_speakerphone or r.has_tv %}, {% endif %}Дошка{% endif %}
-
                   {% if not r.has_projector and not r.has_speakerphone and not r.has_tv and not r.has_whiteboard %}
                     —
                   {% endif %}
@@ -105,11 +80,10 @@
                   <a class="btn" href="{% url 'admin_room_edit' r.id %}" title="Редагувати">
                     <i class="material-icons">edit</i>
                   </a>
-
                   <form method="post"
                         action="{% url 'admin_room_delete' r.id %}"
                         style="display:inline; margin-left:6px;"
-                        onsubmit="return confirm('Точно видалити переговорну «{{ r.name|escapejs }}»?');">
+                        onsubmit="return confirm('Видалити переговорну «{{ r.name|escapejs }}»?');">
                     {% csrf_token %}
                     <button type="submit" class="btn red waves-effect waves-light" title="Видалити">
                       <i class="material-icons">delete</i>
@@ -124,10 +98,8 @@
             {% endfor %}
           </tbody>
         </table>
-
       </div>
     </div>
   </div>
-
 </div>
 {% endblock %}
