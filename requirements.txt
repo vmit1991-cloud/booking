@@ -1,5 +1,5 @@
 asgiref==3.11.1
-Django==6.0.2
+Django==5.2.11
 gunicorn==25.1.0
 packaging==26.0
 sqlparse==0.5.5
